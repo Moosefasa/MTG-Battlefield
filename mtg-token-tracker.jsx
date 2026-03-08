@@ -1787,22 +1787,20 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
         borderLeft: `3px solid ${borderColor}`,
       }),
     }}>
-      {/* Art overlay — fades from right edge into card background */}
+      {/* Art overlay — locked to main row height, zoomed 125%, fades left */}
       {tok.artUrl && (
         <div style={{
-          position: "absolute", top: 0, right: 0, bottom: 0, width: "48%",
-          pointerEvents: "none", zIndex: 0,
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          overflow: "hidden",
+          position: "absolute", top: 0, right: 0, height: 64,
+          width: "55%", pointerEvents: "none", zIndex: 0, overflow: "hidden",
         }}>
           <img src={tok.artUrl} alt="" style={{
-            height: "100%", width: "100%",
-            objectFit: "contain", objectPosition: "right center",
-            display: "block", flexShrink: 0,
+            width: "100%", height: "100%",
+            objectFit: "cover", objectPosition: "center 30%",
+            display: "block", transform: "scale(1.25)", transformOrigin: "right center",
           }}/>
           <div style={{
             position: "absolute", inset: 0,
-            background: "linear-gradient(to right, #1a1f2e 15%, rgba(26,31,46,0.4) 55%, transparent 100%)",
+            background: "linear-gradient(to right, #1a1f2e 0%, #1a1f2e 30%, rgba(26,31,46,0.7) 55%, rgba(26,31,46,0.15) 100%)",
           }}/>
         </div>
       )}
@@ -1926,15 +1924,24 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
         </div>
 
         <button onClick={() => setExpanded(e => !e)} style={{
-          background: "none", border: "none", color: COLORS.muted,
-          fontSize: 18, cursor: "pointer", padding: "4px 8px",
-          transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s",
+          background: expanded ? accent + "22" : "#ffffff0f",
+          border: `1px solid ${expanded ? accent + "66" : COLORS.border}`,
+          color: expanded ? accent : COLORS.text,
+          fontSize: 14, cursor: "pointer", padding: "6px 10px",
+          borderRadius: 8, flexShrink: 0,
+          transform: expanded ? "rotate(180deg)" : "none",
+          transition: "transform 0.2s, background 0.15s, border-color 0.15s",
+          zIndex: 2, position: "relative",
         }}>▾</button>
       </div>
 
       {/* Expanded Controls */}
       {expanded && (
-        <div style={{ borderTop: `1px solid ${COLORS.border}`, padding: "12px 12px", position: "relative", zIndex: 1 }}>
+        <div style={{
+          borderTop: `1px solid ${COLORS.border}`, padding: "12px 12px",
+          position: "relative", zIndex: 1,
+          background: "#1a1f2e",
+        }}>
 
           <Row label="Quantity">
             <Stepper value={tok.quantity} min={tok.tappedCount + 1}
