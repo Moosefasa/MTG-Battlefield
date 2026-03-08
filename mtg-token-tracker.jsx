@@ -117,53 +117,56 @@ const initialDraft = () => ({
 // ── Scryfall helpers ──────────────────────────────────────────────────────────
 const SCRYFALL_CACHE = {};
 
-async function scryfallSearch(query) {
-  if (!query || query.length < 2) return { results: [], error: null };
+function scryfallSearch(query) {
+  if (!query || query.length < 2) return Promise.resolve({ results: [], error: null });
   const cacheKey = query.toLowerCase().trim();
-  if (SCRYFALL_CACHE[cacheKey]) return SCRYFALL_CACHE[cacheKey];
-  try {
-    const q = encodeURIComponent("t:token name:" + cacheKey);
-    const res = await fetch("https://api.scryfall.com/cards/search?q=" + q + "&unique=prints&order=released", {
-      headers: { "User-Agent": "MTGBattlefield/1.0 contact@mtgbattlefield.app" }
-    });
+  if (SCRYFALL_CACHE[cacheKey]) return Promise.resolve(SCRYFALL_CACHE[cacheKey]);
+  const q = encodeURIComponent("t:token name:" + cacheKey);
+  return fetch("https://api.scryfall.com/cards/search?q=" + q + "&unique=prints&order=released", {
+    headers: { "User-Agent": "MTGBattlefield/1.0" }
+  }).then(function(res) {
     if (res.status === 404) return { results: [], error: null };
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return { results: [], error: err.details || ("API error " + res.status) };
+      return res.json().catch(function() { return {}; }).then(function(err) {
+        return { results: [], error: err.details || ("API error " + res.status) };
+      });
     }
-    const data = await res.json();
-    const groups = {};
-    (data.data || []).forEach(card => {
-      const gk = card.name + "|" + (card.colors||[]).join("") + "|" + (card.power||"") + "|" + (card.toughness||"");
-      if (!groups[gk]) groups[gk] = { card, printings: [] };
-      const imgUri = (card.image_uris && card.image_uris.art_crop)
-        || (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris && card.card_faces[0].image_uris.art_crop)
-        || null;
-      const imgNormal = (card.image_uris && card.image_uris.normal)
-        || (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris && card.card_faces[0].image_uris.normal)
-        || null;
-      if (imgUri) groups[gk].printings.push({ id: card.id, artUrl: imgUri, setName: card.set_name, artFull: imgNormal });
+    return res.json().then(function(data) {
+      const groups = {};
+      (data.data || []).forEach(function(card) {
+        const gk = card.name + "|" + (card.colors||[]).join("") + "|" + (card.power||"") + "|" + (card.toughness||"");
+        if (!groups[gk]) groups[gk] = { card: card, printings: [] };
+        const imgUri = (card.image_uris && card.image_uris.art_crop)
+          || (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris && card.card_faces[0].image_uris.art_crop)
+          || null;
+        const imgNormal = (card.image_uris && card.image_uris.normal)
+          || (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris && card.card_faces[0].image_uris.normal)
+          || null;
+        if (imgUri) groups[gk].printings.push({ id: card.id, artUrl: imgUri, setName: card.set_name, artFull: imgNormal });
+      });
+      const results = Object.values(groups).map(function(g) {
+        const card = g.card, printings = g.printings;
+        const face0 = card.card_faces && card.card_faces[0];
+        return {
+          name: card.name,
+          colors: card.colors || (face0 && face0.colors) || [],
+          power: card.power != null ? card.power : (face0 ? face0.power : null),
+          toughness: card.toughness != null ? card.toughness : (face0 ? face0.toughness : null),
+          keywords: card.keywords || [],
+          oracleText: card.oracle_text || (face0 && face0.oracle_text) || "",
+          artUrl: printings[0] ? printings[0].artUrl : null,
+          artUrls: printings,
+          scryfallId: printings[0] ? printings[0].id : null,
+          typeLine: card.type_line || "",
+        };
+      });
+      const out = { results: results, error: null };
+      SCRYFALL_CACHE[cacheKey] = out;
+      return out;
     });
-    const results = Object.values(groups).map(function({ card, printings }) {
-      return {
-        name: card.name,
-        colors: card.colors || (card.card_faces && card.card_faces[0] && card.card_faces[0].colors) || [],
-        power: card.power != null ? card.power : (card.card_faces && card.card_faces[0] ? card.card_faces[0].power : null),
-        toughness: card.toughness != null ? card.toughness : (card.card_faces && card.card_faces[0] ? card.card_faces[0].toughness : null),
-        keywords: card.keywords || [],
-        oracleText: card.oracle_text || (card.card_faces && card.card_faces[0] && card.card_faces[0].oracle_text) || "",
-        artUrl: printings[0] ? printings[0].artUrl : null,
-        artUrls: printings,
-        scryfallId: printings[0] ? printings[0].id : null,
-        typeLine: card.type_line || "",
-      };
-    });
-    const out = { results, error: null };
-    SCRYFALL_CACHE[cacheKey] = out;
-    return out;
-  } catch(e) {
+  }).catch(function(e) {
     return { results: [], error: e.message || "Network error" };
-  }
+  });
 }
 
 // Map Scryfall color strings to our MTG_COLORS ids
@@ -1225,11 +1228,12 @@ function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
     if (val.length < 2) { setSearchResults([]); setSearching(false); return; }
     setSearchError(null);
     setSearching(true);
-    searchTimer.current = setTimeout(async () => {
-      const { results, error } = await scryfallSearch(val);
-      setSearchResults(results);
-      setSearchError(error);
-      setSearching(false);
+    searchTimer.current = setTimeout(function() {
+      scryfallSearch(val).then(function(res) {
+        setSearchResults(res.results);
+        setSearchError(res.error);
+        setSearching(false);
+      });
     }, 320);
   };
 
@@ -1375,7 +1379,7 @@ function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
                 cursor:"pointer", fontFamily:"inherit", textAlign:"left",
               }}>
                 {r.artUrl && (
-                  <img src={r.artUrl} alt={r.name} style={{ width:44, height:32, objectFit:"cover", borderRadius:4, flexShrink:0 }} />
+                  <img src={r.artUrl} alt={r.name} style={{ width:44, height:32, objectFit:"contain", background:COLORS.card, borderRadius:4, flexShrink:0 }} />
                 )}
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:13, fontWeight:"bold", color:COLORS.text }}>{r.name}</div>
@@ -1412,13 +1416,13 @@ function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
         <div style={{ marginTop:10, position:"relative" }}>
           <div style={{
             borderRadius:8, overflow:"hidden", position:"relative",
-            height:100, background:COLORS.card,
+            background:COLORS.card, display:"flex", justifyContent:"center",
           }}>
-            <img src={draft.artUrl} alt="Token art" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-            <div style={{
-              position:"absolute", inset:0,
-              background:"linear-gradient(to right, transparent 40%, #1a1f2e 100%)",
-            }}/>
+            <img src={draft.artUrl} alt="Token art" style={{
+              width:"100%", maxWidth:340, display:"block",
+              objectFit:"contain", objectPosition:"center center",
+              borderRadius:8,
+            }} />
             <div style={{ position:"absolute", right:8, bottom:8, display:"flex", gap:6 }}>
               {draft.artUrls.length > 1 && (
                 <button onClick={() => setShowArtPicker(v => !v)} style={{
@@ -1442,7 +1446,7 @@ function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
                   borderRadius:6, overflow:"hidden", cursor:"pointer", background:"none",
                   transition:"border-color 0.15s",
                 }}>
-                  <img src={p.artUrl} alt={p.setName} style={{ width:"100%", height:54, objectFit:"cover", display:"block" }}/>
+                  <img src={p.artUrl} alt={p.setName} style={{ width:"100%", height:54, objectFit:"contain", background:COLORS.card, display:"block" }}/>
                   <div style={{ fontSize:9, color:COLORS.muted, padding:"2px 4px", background:COLORS.card, textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.setName}</div>
                 </button>
               ))}
@@ -1786,16 +1790,19 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
       {/* Art overlay — fades from right edge into card background */}
       {tok.artUrl && (
         <div style={{
-          position: "absolute", top: 0, right: 0, bottom: 0, width: "52%",
+          position: "absolute", top: 0, right: 0, bottom: 0, width: "48%",
           pointerEvents: "none", zIndex: 0,
+          display: "flex", alignItems: "center", justifyContent: "flex-end",
+          overflow: "hidden",
         }}>
           <img src={tok.artUrl} alt="" style={{
-            width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top",
-            display: "block",
+            height: "100%", width: "100%",
+            objectFit: "contain", objectPosition: "right center",
+            display: "block", flexShrink: 0,
           }}/>
           <div style={{
             position: "absolute", inset: 0,
-            background: "linear-gradient(to right, #1a1f2e 0%, rgba(26,31,46,0.55) 45%, rgba(26,31,46,0.1) 100%)",
+            background: "linear-gradient(to right, #1a1f2e 15%, rgba(26,31,46,0.4) 55%, transparent 100%)",
           }}/>
         </div>
       )}
