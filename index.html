@@ -35,10 +35,10 @@
 
   <!-- Babel standalone to transpile JSX in-browser -->
   <!-- For production you'd replace this with a Vite/CRA build, but this works great for GitHub Pages -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
 
   <!-- The app -->
-  <script type="text/babel" src="mtg-token-tracker.jsx"></script>
+  <script type="text/babel" data-presets="react" src="mtg-token-tracker.jsx"></script>
 
   <script>
     // Mount the app once the JSX is transpiled
