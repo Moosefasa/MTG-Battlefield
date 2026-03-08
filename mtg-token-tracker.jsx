@@ -1790,8 +1790,8 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
       {/* Art overlay — right spacer keeps dropdown clear, edge-to-edge height */}
       {tok.artUrl && (
         <div style={{
-          position: "absolute", top: 0, bottom: 0,
-          right: 48, width: "42%",
+          position: "absolute", top: 0, height: 80,
+          right: 48, width: 142,
           pointerEvents: "none", zIndex: 0, overflow: "hidden",
         }}>
           <img src={tok.artUrl} alt="" style={{
