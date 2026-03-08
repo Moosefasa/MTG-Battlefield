@@ -1049,6 +1049,7 @@ function DiceModal({ onClose, closing }) {
 function TokenTrackerScreen({ onBack, tokens, setTokens }) {
   const [eotFlash, setEotFlash] = useState(false);
   const [confirm, setConfirm] = useState(null);
+  const [layout, setLayout] = useState("list"); // "list" | "grid" 
 
   const removeToken = (id) => setTokens(t => t.filter(tok => tok.id !== id));
   const updateToken = useCallback((id, patch) => {
@@ -1115,7 +1116,15 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
               letterSpacing: 1,
             }}>Token Tracker</h1>
           </div>
-          <div style={{ width: 60 }} />
+          <button onClick={() => setLayout(l => l === "list" ? "grid" : "list")} style={{
+            background: layout === "grid" ? COLORS.gold + "22" : "#ffffff0a",
+            border: `1px solid ${layout === "grid" ? COLORS.gold + "88" : COLORS.border}`,
+            color: layout === "grid" ? COLORS.gold : COLORS.muted,
+            borderRadius: 8, padding: "5px 10px", fontSize: 13,
+            cursor: "pointer", fontFamily: "inherit",
+            boxShadow: layout === "grid" ? ("0 0 8px " + COLORS.gold + "44") : "none",
+            transition: "all 0.15s", width: 60,
+          }}>{layout === "grid" ? "⊞ Grid" : "☰ List"}</button>
         </div>
 
         {/* Action row */}
@@ -1184,8 +1193,8 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
         </div>
       </div>
 
-      {/* Token List */}
-      <div style={{ padding: "12px 12px 0" }}>
+      {/* Token List / Grid */}
+      <div style={{ padding: layout === "grid" ? "12px 10px 0" : "12px 12px 0" }}>
         {tokens.length === 0 && (
           <div style={{ textAlign: "center", padding: "60px 20px", color: COLORS.muted, fontSize: 14, lineHeight: 2 }}>
             <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.3 }}>⚔</div>
@@ -1194,7 +1203,7 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
           </div>
         )}
 
-        {tokens.map(tok => (
+        {layout === "list" && tokens.map(tok => (
           <TokenCard key={tok.id} tok={tok}
             displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
             updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
@@ -1202,6 +1211,21 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
           />
         ))}
 
+        {layout === "grid" && (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: 10,
+          }}>
+            {tokens.map(tok => (
+              <TokenCardGrid key={tok.id} tok={tok}
+                displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
+                updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
+                tapOne={tapOne} untapOne={untapOne} removeToken={removeToken}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
 
@@ -1773,6 +1797,352 @@ function ManaBtn({ s, onClick }) {
       flexShrink: 0,
       lineHeight: 1,
     }}>{s.label}</button>
+  );
+}
+
+
+// ── Token Card Grid (portrait MTG-card style) ──────────────────────────────────
+function TokenCardGrid({ tok, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
+  const [expanded, setExpanded] = useState(false);
+  const [showCounterMenu, setShowCounterMenu] = useState(false);
+
+  const name = displayType(tok);
+  const isArtifactToken = ARTIFACT_TOKENS.includes(tok.type);
+  const showPT = !isArtifactToken || tok.isCreature;
+  const pow = effectivePower(tok);
+  const tou = effectiveToughness(tok);
+  const tapped = tok.tappedCount;
+  const untapped = tok.quantity - tapped;
+  const allTapped = tapped === tok.quantity && tok.quantity > 0;
+  const someTapped = tapped > 0;
+  const hasEotMod = tok.eotPowerMod !== 0 || tok.eotToughnessMod !== 0;
+  const accent = cardAccent(tok.colors);
+  const gradient = cardGradient(tok.colors);
+  const isMulti = (tok.colors || []).length > 1;
+  const borderColor = allTapped ? COLORS.tap : hasEotMod ? COLORS.eot : accent;
+
+  const cardBorderStyle = isMulti && !allTapped && !hasEotMod ? {
+    border: `1px solid ${borderColor}44`,
+    backgroundImage: `linear-gradient(#1a1f2e, #1a1f2e), ${gradient}`,
+    backgroundOrigin: "border-box",
+    backgroundClip: "padding-box, border-box",
+  } : {
+    border: `1px solid ${borderColor}66`,
+    borderTop: `3px solid ${borderColor}`,
+  };
+
+  return (
+    <div style={{
+      background: "#1a1f2e",
+      borderRadius: 12,
+      overflow: "hidden",
+      position: "relative",
+      opacity: allTapped ? 0.7 : 1,
+      transition: "all 0.2s ease",
+      boxShadow: allTapped ? "none" : hasEotMod ? ("0 2px 16px " + COLORS.eot + "44") : ("0 2px 14px " + accent + "33"),
+      display: "flex", flexDirection: "column",
+      ...cardBorderStyle,
+    }}>
+
+      {/* ── Art section (top ~55% of card) ── */}
+      <div style={{
+        position: "relative",
+        width: "100%",
+        paddingTop: "62%", // portrait ratio art window
+        overflow: "hidden",
+        background: COLORS.card,
+        flexShrink: 0,
+      }}>
+        {tok.artUrl ? (
+          <>
+            <img src={tok.artUrl} alt={name} style={{
+              position: "absolute", inset: 0,
+              width: "100%", height: "100%",
+              objectFit: "cover", objectPosition: "center 20%",
+              display: "block",
+            }}/>
+            {/* Bottom fade into card body */}
+            <div style={{
+              position: "absolute", inset: 0,
+              background: "linear-gradient(to bottom, transparent 45%, rgba(26,31,46,0.7) 80%, #1a1f2e 100%)",
+            }}/>
+          </>
+        ) : (
+          /* No art — show color identity placeholder */
+          <div style={{
+            position: "absolute", inset: 0,
+            background: isMulti ? gradient : (accent + "22"),
+            display: "flex", alignItems: "center", justifyContent: "center",
+            opacity: 0.4,
+          }}>
+            <span style={{ fontSize: 36, opacity: 0.5 }}>⚔</span>
+          </div>
+        )}
+
+        {/* Quantity + tap pips overlaid bottom-left of art */}
+        <div style={{
+          position: "absolute", bottom: 6, left: 8,
+          display: "flex", alignItems: "center", gap: 5,
+        }}>
+          <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+            {Array.from({ length: Math.min(tok.quantity, 8) }).map((_, i) => {
+              const isTapped = i >= untapped;
+              return (
+                <div key={i} style={{
+                  width: 5, height: 9, borderRadius: 1,
+                  background: isTapped ? COLORS.tap : accent,
+                  opacity: isTapped ? 0.7 : 1,
+                  transform: isTapped ? "rotate(90deg)" : "none",
+                  transition: "all 0.2s",
+                  boxShadow: isTapped ? "none" : ("0 0 4px " + accent + "88"),
+                }} />
+              );
+            })}
+            {tok.quantity > 8 && <span style={{ fontSize: 9, color: accent }}>+{tok.quantity - 8}</span>}
+          </div>
+          <span style={{ fontSize: 11, color: COLORS.text, fontWeight: "bold", textShadow: "0 1px 4px #000" }}>
+            ×{tok.quantity}
+          </span>
+        </div>
+
+        {/* Tap/Untap buttons top-right of art */}
+        <div style={{
+          position: "absolute", top: 5, right: 5,
+          display: "flex", flexDirection: "column", gap: 3,
+        }}>
+          <button onClick={() => tapOne(tok.id)} disabled={tapped >= tok.quantity} style={{
+            width: 26, height: 24, borderRadius: "5px 5px 2px 2px",
+            background: "rgba(0,0,0,0.65)",
+            border: ("1px solid " + (tapped < tok.quantity ? accent + "99" : COLORS.border + "66")),
+            color: tapped < tok.quantity ? accent : COLORS.muted,
+            fontSize: 12, cursor: tapped < tok.quantity ? "pointer" : "default",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: tapped < tok.quantity ? ("0 0 7px " + accent + "77") : "none",
+            transition: "all 0.15s",
+          }}>↷</button>
+          <button onClick={() => untapOne(tok.id)} disabled={tapped === 0} style={{
+            width: 26, height: 24, borderRadius: "2px 2px 5px 5px",
+            background: "rgba(0,0,0,0.65)",
+            border: ("1px solid " + (tapped > 0 ? accent + "99" : COLORS.border + "66")),
+            color: tapped > 0 ? accent : COLORS.muted,
+            fontSize: 12, cursor: tapped > 0 ? "pointer" : "default",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: tapped > 0 ? ("0 0 7px " + accent + "77") : "none",
+            transition: "all 0.15s",
+          }}>⟳</button>
+        </div>
+
+        {/* P/T badge overlaid bottom-right of art */}
+        {showPT && (
+          <div style={{
+            position: "absolute", bottom: 6, right: 6,
+            background: "rgba(0,0,0,0.75)",
+            border: ("1px solid " + (hasEotMod ? COLORS.eot : accent) + "88"),
+            borderRadius: 6, padding: "2px 7px",
+            fontSize: 13, fontWeight: "bold",
+            color: hasEotMod ? COLORS.eot : accent,
+            boxShadow: "0 0 8px " + (hasEotMod ? COLORS.eot : accent) + "66",
+            letterSpacing: 0.5,
+          }}>
+            {pow}/{tou}
+          </div>
+        )}
+      </div>
+
+      {/* ── Card body (bottom ~45%) ── */}
+      <div style={{
+        padding: "7px 10px 8px",
+        display: "flex", flexDirection: "column", gap: 4,
+        flex: 1,
+        background: "#1a1f2e",
+        position: "relative", zIndex: 1,
+      }}>
+        {/* Name + color pips row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+          <span style={{
+            fontSize: 13, fontWeight: "bold", color: COLORS.text,
+            flex: 1, minWidth: 0, overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>{name}</span>
+          {(tok.colors || []).length > 0 && (
+            <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+              {tok.colors.map(id => {
+                const mc = MTG_COLORS.find(c => c.id === id);
+                return <div key={id} style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: mc?.hex || "#888", border: "1px solid #ffffff33",
+                  boxShadow: "0 0 4px " + (mc?.hex || "#888") + "88",
+                }} />;
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Type / keyword badges */}
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {isArtifactToken && (
+            <span style={{
+              fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase",
+              color: COLORS.artifact, background: COLORS.artifact + "22",
+              padding: "1px 5px", borderRadius: 3,
+            }}>{tok.isCreature ? "Art. Creature" : "Artifact"}</span>
+          )}
+          {hasEotMod && (
+            <span style={{
+              fontSize: 9, color: COLORS.eot, background: COLORS.eot + "22",
+              padding: "1px 5px", borderRadius: 3,
+            }}>until EOT</span>
+          )}
+          {tok.keywords && tok.keywords.slice(0, 3).map(kw => (
+            <span key={kw} style={{
+              fontSize: 9, padding: "1px 5px", borderRadius: 8,
+              background: accent + "22", border: ("1px solid " + accent + "44"),
+              color: accent,
+            }}>{kw}</span>
+          ))}
+          {tok.counters.map(c => (
+            <span key={c.type} style={{
+              fontSize: 9,
+              color: c.type === "+1/+1" ? COLORS.teal : c.type === "-1/-1" ? COLORS.red : COLORS.gold,
+              background: "#ffffff11", padding: "1px 5px", borderRadius: 3,
+            }}>{c.type}×{c.count}</span>
+          ))}
+        </div>
+
+        {/* Ability text snippet */}
+        {tok.abilityText && !expanded && (
+          <div style={{
+            fontSize: 9, color: COLORS.muted, fontStyle: "italic",
+            lineHeight: 1.4, overflow: "hidden",
+            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+          }}>
+            {tok.abilityText}
+          </div>
+        )}
+
+        {/* Expand toggle */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
+          <button onClick={() => setExpanded(e => !e)} style={{
+            background: expanded ? accent + "28" : "#ffffff0f",
+            border: ("1px solid " + (expanded ? accent + "99" : COLORS.border + "aa")),
+            color: expanded ? accent : COLORS.text,
+            fontSize: 11, cursor: "pointer", padding: "3px 8px",
+            borderRadius: 6, flexShrink: 0,
+            transform: expanded ? "rotate(180deg)" : "none",
+            transition: "transform 0.2s, box-shadow 0.15s",
+            boxShadow: expanded ? ("0 0 8px " + accent + "66") : ("0 0 4px " + accent + "22"),
+          }}>▾</button>
+        </div>
+      </div>
+
+      {/* ── Expanded controls (identical logic to list card) ── */}
+      {expanded && (
+        <div style={{
+          borderTop: ("1px solid " + COLORS.border),
+          padding: "10px 10px", background: "#1a1f2e",
+          position: "relative", zIndex: 1,
+        }}>
+          <Row label="Qty">
+            <Stepper value={tok.quantity} min={tok.tappedCount + 1}
+              onChange={v => updateToken(tok.id, { quantity: v })} color={accent} />
+          </Row>
+
+          {isArtifactToken && (
+            <Row label="Creature">
+              <button onClick={() => updateToken(tok.id, {
+                isCreature: !tok.isCreature, basePower: tok.isCreature ? 0 : 1,
+                baseToughness: tok.isCreature ? 0 : 1, powerMod: 0, toughnessMod: 0,
+                eotPowerMod: 0, eotToughnessMod: 0,
+              })} style={{
+                background: tok.isCreature ? COLORS.teal + "22" : "#ffffff0a",
+                border: ("1px solid " + (tok.isCreature ? COLORS.teal : COLORS.border)),
+                color: tok.isCreature ? COLORS.teal : COLORS.muted,
+                borderRadius: 20, padding: "4px 12px",
+                cursor: "pointer", fontFamily: "inherit", fontSize: 11, transition: "all 0.15s",
+              }}>{tok.isCreature ? "✔ Creature" : "Animate"}</button>
+            </Row>
+          )}
+
+          {showPT && (
+            <>
+              <Row label="Base P/T">
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <Stepper value={tok.basePower} onChange={v => updateToken(tok.id, { basePower: v })} color={accent} small />
+                  <span style={{ color: COLORS.muted }}>/</span>
+                  <Stepper value={tok.baseToughness} onChange={v => updateToken(tok.id, { baseToughness: v })} color={accent} small />
+                </div>
+              </Row>
+              <Row label="Modifier">
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <Stepper value={tok.powerMod} onChange={v => updateToken(tok.id, { powerMod: v })} color={accent} small allowNeg />
+                  <span style={{ color: COLORS.muted }}>/</span>
+                  <Stepper value={tok.toughnessMod} onChange={v => updateToken(tok.id, { toughnessMod: v })} color={accent} small allowNeg />
+                </div>
+              </Row>
+              <div style={{
+                margin: "8px 0 6px", padding: "8px 10px",
+                background: COLORS.eot + "0e", border: ("1px solid " + COLORS.eot + "33"), borderRadius: 8,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, color: COLORS.eot, letterSpacing: 1, textTransform: "uppercase" }}>⏳ Until EOT</span>
+                  {(tok.eotPowerMod !== 0 || tok.eotToughnessMod !== 0) && (
+                    <button onClick={() => updateToken(tok.id, { eotPowerMod: 0, eotToughnessMod: 0 })}
+                      style={{ ...smallBtn(COLORS.eot), fontSize: 9, padding: "1px 6px" }}>Clear</button>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <Stepper value={tok.eotPowerMod} onChange={v => updateToken(tok.id, { eotPowerMod: v })} color={COLORS.eot} small allowNeg />
+                  <span style={{ color: COLORS.muted, fontSize: 12 }}>/</span>
+                  <Stepper value={tok.eotToughnessMod} onChange={v => updateToken(tok.id, { eotToughnessMod: v })} color={COLORS.eot} small allowNeg />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Counters */}
+          <Row label="Counters">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+              {tok.counters.map(c => (
+                <span key={c.type} style={{
+                  display: "flex", alignItems: "center", gap: 3,
+                  background: "#ffffff0a", borderRadius: 4, padding: "1px 4px",
+                }}>
+                  <button onClick={() => removeCounter(tok.id, c.type)} style={{ ...iconBtn, color: COLORS.red, fontSize: 13 }}>−</button>
+                  <span style={{ fontSize: 10, color: COLORS.text }}>{c.type} {c.count}</span>
+                  <button onClick={() => addCounter(tok.id, c.type)} style={{ ...iconBtn, color: COLORS.teal, fontSize: 13 }}>+</button>
+                </span>
+              ))}
+              <div style={{ position: "relative" }}>
+                <button onClick={() => setShowCounterMenu(m => !m)} style={{ ...smallBtn(COLORS.gold), fontSize: 10 }}>
+                  + Counter
+                </button>
+                {showCounterMenu && (
+                  <div style={{
+                    position: "absolute", bottom: "calc(100% + 4px)", left: 0, zIndex: 50,
+                    background: COLORS.surface, border: ("1px solid " + COLORS.border),
+                    borderRadius: 8, padding: 6, display: "flex", flexDirection: "column", gap: 4, minWidth: 110,
+                  }}>
+                    {["+1/+1", "-1/-1", "Loyalty", "Lore", "Charge", "Age", "Time"].map(ct => (
+                      <button key={ct} onClick={() => { addCounter(tok.id, ct); setShowCounterMenu(false); }} style={smallBtn(COLORS.teal)}>
+                        {ct}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Row>
+
+          <button onClick={() => removeToken(tok.id)} style={{
+            marginTop: 10, width: "100%",
+            background: COLORS.red + "22", border: ("1px solid " + COLORS.red + "88"),
+            color: COLORS.red, borderRadius: 8, padding: "7px",
+            cursor: "pointer", fontFamily: "inherit", fontSize: 12, letterSpacing: 0.5,
+            boxShadow: ("0 0 10px " + COLORS.red + "44"),
+          }}>✕ Remove</button>
+        </div>
+      )}
+    </div>
   );
 }
 
