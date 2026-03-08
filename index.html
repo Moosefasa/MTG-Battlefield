@@ -10,18 +10,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Battlefield" />
 
-  <!-- Apple touch icons -->
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png" />
-  <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png" />
-  <link rel="apple-touch-icon" sizes="120x120" href="icons/icon-120.png" />
-
-  <!-- PWA manifest -->
-  <link rel="manifest" href="manifest.json" />
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png" />
-  <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16.png" />
-
   <title>MTG Battlefield</title>
 
   <style>
@@ -50,7 +38,7 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <!-- The app -->
-  <script type="text/babel" src="mtg-token-tracker.jsx" data-type="module"></script>
+  <script type="text/babel" src="mtg-token-tracker.jsx"></script>
 
   <script>
     // Mount the app once the JSX is transpiled
@@ -67,15 +55,5 @@
     window.addEventListener('load', () => setTimeout(mount, 200));
   </script>
 
-  <!-- Register service worker -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-          .then(reg => console.log('SW registered:', reg.scope))
-          .catch(err => console.log('SW registration failed:', err));
-      });
-    }
-  </script>
 </body>
 </html>
