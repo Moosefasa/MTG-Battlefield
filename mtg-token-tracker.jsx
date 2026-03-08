@@ -1787,20 +1787,21 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
         borderLeft: `3px solid ${borderColor}`,
       }),
     }}>
-      {/* Art overlay — locked to main row height, zoomed 125%, fades left */}
+      {/* Art overlay — right spacer keeps dropdown clear, edge-to-edge height */}
       {tok.artUrl && (
         <div style={{
-          position: "absolute", top: 0, right: 0, height: 64,
-          width: "55%", pointerEvents: "none", zIndex: 0, overflow: "hidden",
+          position: "absolute", top: 0, bottom: 0,
+          right: 48, width: "42%",
+          pointerEvents: "none", zIndex: 0, overflow: "hidden",
         }}>
           <img src={tok.artUrl} alt="" style={{
             width: "100%", height: "100%",
-            objectFit: "cover", objectPosition: "center 30%",
-            display: "block", transform: "scale(1.25)", transformOrigin: "right center",
+            objectFit: "cover", objectPosition: "center 25%",
+            display: "block",
           }}/>
           <div style={{
             position: "absolute", inset: 0,
-            background: "linear-gradient(to right, #1a1f2e 0%, #1a1f2e 30%, rgba(26,31,46,0.7) 55%, rgba(26,31,46,0.15) 100%)",
+            background: "linear-gradient(to right, #1a1f2e 0%, #1a1f2e 15%, rgba(26,31,46,0.5) 45%, rgba(26,31,46,0.05) 75%, #1a1f2e 100%)",
           }}/>
         </div>
       )}
@@ -1812,18 +1813,22 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
           <button onClick={() => tapOne(tok.id)} disabled={tapped >= tok.quantity} title="Tap one" style={{
             width: 30, height: 28, borderRadius: "6px 6px 3px 3px",
             background: tapped < tok.quantity ? accent + "22" : "#ffffff06",
-            border: `1px solid ${tapped < tok.quantity ? accent + "66" : COLORS.border}`,
+            border: `1px solid ${tapped < tok.quantity ? accent + "99" : COLORS.border}`,
             color: tapped < tok.quantity ? accent : COLORS.muted,
             fontSize: 13, cursor: tapped < tok.quantity ? "pointer" : "default",
             display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: tapped < tok.quantity ? `0 0 8px ${accent}66, inset 0 0 4px ${accent}22` : "none",
+            transition: "all 0.15s",
           }}>↷</button>
           <button onClick={() => untapOne(tok.id)} disabled={tapped === 0} title="Untap one" style={{
             width: 30, height: 28, borderRadius: "3px 3px 6px 6px",
-            background: tapped > 0 ? COLORS.teal + "22" : "#ffffff06",
-            border: `1px solid ${tapped > 0 ? COLORS.teal + "66" : COLORS.border}`,
-            color: tapped > 0 ? COLORS.teal : COLORS.muted,
+            background: tapped > 0 ? accent + "22" : "#ffffff06",
+            border: `1px solid ${tapped > 0 ? accent + "99" : COLORS.border}`,
+            color: tapped > 0 ? accent : COLORS.muted,
             fontSize: 13, cursor: tapped > 0 ? "pointer" : "default",
             display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: tapped > 0 ? `0 0 8px ${accent}66, inset 0 0 4px ${accent}22` : "none",
+            transition: "all 0.15s",
           }}>⟳</button>
         </div>
 
@@ -1924,13 +1929,14 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
         </div>
 
         <button onClick={() => setExpanded(e => !e)} style={{
-          background: expanded ? accent + "22" : "#ffffff0f",
-          border: `1px solid ${expanded ? accent + "66" : COLORS.border}`,
+          background: expanded ? accent + "28" : "#ffffff0f",
+          border: `1px solid ${expanded ? accent + "99" : COLORS.border + "aa"}`,
           color: expanded ? accent : COLORS.text,
           fontSize: 14, cursor: "pointer", padding: "6px 10px",
           borderRadius: 8, flexShrink: 0,
           transform: expanded ? "rotate(180deg)" : "none",
-          transition: "transform 0.2s, background 0.15s, border-color 0.15s",
+          transition: "transform 0.2s, box-shadow 0.15s, background 0.15s",
+          boxShadow: expanded ? `0 0 10px ${accent}77, inset 0 0 5px ${accent}22` : `0 0 6px ${accent}33`,
           zIndex: 2, position: "relative",
         }}>▾</button>
       </div>
@@ -2077,9 +2083,11 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
 
           <button onClick={() => removeToken(tok.id)} style={{
             marginTop: 14, width: "100%",
-            background: COLORS.red + "22", border: `1px solid ${COLORS.red}55`,
+            background: COLORS.red + "22", border: `1px solid ${COLORS.red}88`,
             color: COLORS.red, borderRadius: 8, padding: "8px",
             cursor: "pointer", fontFamily: "inherit", fontSize: 13, letterSpacing: 0.5,
+            boxShadow: `0 0 10px ${COLORS.red}44, inset 0 0 6px ${COLORS.red}18`,
+            transition: "box-shadow 0.15s",
           }}>
             ✕ Remove Token
           </button>
@@ -2213,14 +2221,18 @@ const btnStyle = (borderColor, bg) => ({
 });
 
 const smallBtn = (color) => ({
-  background: color + "22", border: `1px solid ${color}55`,
+  background: color + "22", border: `1px solid ${color}88`,
   color: color, borderRadius: 6, padding: "4px 8px",
   cursor: "pointer", fontFamily: "inherit", fontSize: 12,
+  boxShadow: `0 0 8px ${color}44, inset 0 0 4px ${color}18`,
+  transition: "box-shadow 0.15s",
 });
 
 const iconBtn = {
   background: "none", border: "none", cursor: "pointer",
   fontSize: 16, lineHeight: 1, padding: "0 2px", fontFamily: "inherit",
+  filter: "drop-shadow(0 0 4px currentColor)",
+  transition: "filter 0.15s",
 };
 
 function effectivePower(tok) { return tok.basePower + tok.powerMod + tok.eotPowerMod; }
