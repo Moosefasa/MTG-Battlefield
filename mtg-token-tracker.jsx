@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+const { useState, useCallback, useRef } = React;
 
 const COLORS = {
   bg: "#0a0c10",
@@ -204,7 +204,7 @@ if (!document.head.querySelector("#bf-styles")) {
   document.head.appendChild(styleTag);
 }
 
-export default function App() {
+function App() {
   const [screen, setScreen]     = useState("hub");
   const [animDir, setAnimDir]   = useState(null);
   const [diceState, setDiceState] = useState("closed");
