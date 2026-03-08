@@ -1,0 +1,17 @@
+Upcoming changes:
+
+List/Grid Layout in Token Tracker:
+1: List/Grid layout will be revisited. List works as intended. Grid has the direction, but execution is poor. Grid layout should have a slider or dropdown that allows for the adjustment of sizing. The same could be done for list, but not necessary. 
+2: Card structure and menus on Grid layout are atrocious and cut off most info. Buttons on each card could have better placement. Menus need to display all modifiers and text clearly. Perhaps this could give a similar display to the list layout cards when the dropdown is active. 
+3: For both layouts, add functionality for gestures. Specifically, the ability to move and reorder cards by dragging. 
+
+Themes and Styling: 
+Adding themes would be a fun addition. Beyond light/dark themes, possibly adding other color schemes and design would be a great include. Currently, the themes would be Light, Dark, Modern, Medieval, Drawn, Minimal. Modern, Medieval, and Minimal would have subthemes based on coloring. 
+Currently, styling looks good, but a bit stale. Changing fonts would be a great start.
+
+Life Total Card:
+1: This works, but I want to add animations. A slider/dropdown menu for sizing would also be benefitial. 
+2: Adding emblems and effects is worth looking into. Emblems should be added here to prevent being cleared in the Token Tracker. Effects, such as City's Blessing, Monarch, Death, etc., will also be added here. 
+
+Turn Indication and Upkeep Warning:
+This will be totally optional, but adding buttons for Begin Turn and Pass Turn would also pop a freindly reminder to check Upkeep triggers and End of Turn triggers. 
