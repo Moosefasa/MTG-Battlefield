@@ -117,12 +117,15 @@ const initialDraft = () => ({
 // ── Scryfall helpers ──────────────────────────────────────────────────────────
 const SCRYFALL_CACHE = {};
 
-function scryfallSearch(query) {
+function scryfallSearch(query, category) {
   if (!query || query.length < 2) return Promise.resolve({ results: [], error: null });
-  const cacheKey = query.toLowerCase().trim();
+  var isCopy = category === "copy";
+  const cacheKey = (category || "creature") + ":" + query.toLowerCase().trim();
   if (SCRYFALL_CACHE[cacheKey]) return Promise.resolve(SCRYFALL_CACHE[cacheKey]);
-  const q = encodeURIComponent("t:token name:" + cacheKey);
-  return fetch("https://api.scryfall.com/cards/search?q=" + q + "&unique=prints&order=released", {
+  var qStr = isCopy ? ("-t:token name:" + query.toLowerCase().trim()) : ("t:token name:" + query.toLowerCase().trim());
+  var unique = isCopy ? "art" : "prints";
+  const q = encodeURIComponent(qStr);
+  return fetch("https://api.scryfall.com/cards/search?q=" + q + "&unique=" + unique + "&order=released", {
     headers: { "User-Agent": "MTGBattlefield/1.0" }
   }).then(function(res) {
     if (res.status === 404) return { results: [], error: null };
@@ -1209,7 +1212,8 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
 // ── Add Token Form ─────────────────────────────────────────────────────────────
 function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
   const isArt = draft.category === "artifact";
-  const showAbilities = draft.category === "creature";
+  const isCopy = draft.category === "copy";
+  const showAbilities = draft.category === "creature" || draft.category === "copy";
   const [openSection, setOpenSection] = useState(null);
   const [openSymbolGroup, setOpenSymbolGroup] = useState(null);
   const [abilityEl, setAbilityEl] = useState(null);
@@ -1220,6 +1224,15 @@ function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
   const [showResults, setShowResults] = useState(false);
   const [showArtPicker, setShowArtPicker] = useState(false);
   const searchTimer = useRef(null);
+  const prevCategory = useRef(draft.category);
+
+  // Clear search when category changes
+  if (prevCategory.current !== draft.category) {
+    prevCategory.current = draft.category;
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchError(null);
+  }
 
   const handleSearchChange = (val) => {
     setSearchQuery(val);
@@ -1229,7 +1242,7 @@ function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
     setSearchError(null);
     setSearching(true);
     searchTimer.current = setTimeout(function() {
-      scryfallSearch(val).then(function(res) {
+      scryfallSearch(val, draft.category).then(function(res) {
         setSearchResults(res.results);
         setSearchError(res.error);
         setSearching(false);
@@ -1318,28 +1331,36 @@ function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
 
       {/* Category toggle */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        {[{ key: "creature", label: "⚔ Creature" }, { key: "artifact", label: "⚙ Artifact" }].map(({ key, label }) => (
+        {[
+          { key: "creature", label: "⚔ Creature",  color: COLORS.teal,     defaultType: "Saproling", defaultColors: ["G"] },
+          { key: "artifact", label: "⚙ Artifact",  color: COLORS.artifact, defaultType: "Treasure",  defaultColors: ["C"] },
+          { key: "copy",     label: "✦ Copy",       color: COLORS.eot,      defaultType: "",          defaultColors: []    },
+        ].map(({ key, label, color, defaultType, defaultColors }) => (
           <button key={key}
             onClick={() => setDraft(d => ({
               ...d, category: key,
-              type: key === "artifact" ? "Treasure" : "Saproling",
-              colors: key === "artifact" ? ["C"] : ["G"],
+              type: defaultType,
+              customType: "",
+              colors: defaultColors,
               isCreature: false,
+              artUrl: null, artUrls: [], scryfallId: null,
             }))}
             style={{
               flex: 1, padding: "8px",
-              background: draft.category === key ? (key === "artifact" ? COLORS.artifact + "33" : COLORS.teal + "22") : "#ffffff0a",
-              border: `1px solid ${draft.category === key ? (key === "artifact" ? COLORS.artifact : COLORS.teal) : COLORS.border}`,
-              color: draft.category === key ? (key === "artifact" ? COLORS.artifact : COLORS.teal) : COLORS.muted,
+              background: draft.category === key ? color + "28" : "#ffffff0a",
+              border: `1px solid ${draft.category === key ? color + "bb" : COLORS.border}`,
+              color: draft.category === key ? color : COLORS.muted,
               borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
               fontSize: 12, letterSpacing: 1, textTransform: "uppercase",
+              boxShadow: draft.category === key ? ("0 0 8px " + color + "44") : "none",
+              transition: "all 0.15s",
             }}
           >{label}</button>
         ))}
       </div>
 
-      {/* Scryfall token search */}
-      <Label>Token Search</Label>
+      {/* Scryfall search */}
+      <Label>{isCopy ? "Card Search" : "Token Search"}</Label>
       <div style={{ position: "relative" }}>
         <input
           value={searchQuery}
@@ -1471,15 +1492,21 @@ function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
       )}
 
       {/* Qty / P/T */}
-      <div style={{ display: "grid", gridTemplateColumns: isArt ? "1fr" : "1fr 1fr 1fr", gap: 8, marginTop: 8 }}>
-        <div><Label>Qty</Label><NumInput value={draft.quantity} min={1} onChange={v => setDraft(d => ({ ...d, quantity: v }))} /></div>
-        {!isArt && (
-          <>
-            <div><Label>Power</Label><NumInput value={draft.basePower} onChange={v => setDraft(d => ({ ...d, basePower: v }))} /></div>
-            <div><Label>Toughness</Label><NumInput value={draft.baseToughness} onChange={v => setDraft(d => ({ ...d, baseToughness: v }))} /></div>
-          </>
-        )}
-      </div>
+      {(() => {
+        const showPT = !isArt && (!isCopy || (draft.basePower !== null && draft.basePower !== undefined));
+        const cols = showPT ? "1fr 1fr 1fr" : "1fr";
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginTop: 8 }}>
+            <div><Label>Qty</Label><NumInput value={draft.quantity} min={1} onChange={v => setDraft(d => ({ ...d, quantity: v }))} /></div>
+            {showPT && (
+              <>
+                <div><Label>Power</Label><NumInput value={draft.basePower} onChange={v => setDraft(d => ({ ...d, basePower: v }))} /></div>
+                <div><Label>Toughness</Label><NumInput value={draft.baseToughness} onChange={v => setDraft(d => ({ ...d, baseToughness: v }))} /></div>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Accordion sections ── */}
       <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
