@@ -1049,108 +1049,116 @@ function DiceModal({ onClose, closing }) {
 
 // ── Drag-to-reorder hook ───────────────────────────────────────────────────────
 function useDragReorder(items, setItems) {
-  const dragState = useRef(null);
-  const [dragIndex, setDragIndex] = useState(null);
-  const [dropIndex, setDropIndex] = useState(null);
-  const [dragCardHeight, setDragCardHeight] = useState(0);
+  // All mutable drag state lives in a ref so event handlers always see current values
+  const ds = useRef(null); // { id, index, dropIndex, offsetX, offsetY, ghostEl, cardHeight }
 
-  const onDragStart = (e, id, index, containerEl) => {
+  // These three drive re-renders — updated via the ref's scheduler
+  const [dragIndex,     setDragIndex]     = useState(null);
+  const [dropIndex,     setDropIndex]     = useState(null);
+  const [dragCardHeight,setDragCardHeight]= useState(0);
+
+  // Keep setItems stable in the ref so cleanup can call it without stale closure
+  const setItemsRef = useRef(setItems);
+  setItemsRef.current = setItems;
+
+  // Stable refs for the three state setters — never go stale
+  const setDragIndexRef     = useRef(setDragIndex);
+  const setDropIndexRef     = useRef(setDropIndex);
+  const setDragCardHeightRef= useRef(setDragCardHeight);
+
+  const handleMove = useRef(null);
+  const handleUp   = useRef(null);
+
+  handleMove.current = function(e) {
+    if (!ds.current) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    // Move ghost
+    ds.current.ghostEl.style.left = (clientX - ds.current.offsetX) + "px";
+    ds.current.ghostEl.style.top  = (clientY - ds.current.offsetY) + "px";
+
+    // Compute new drop index from card midpoints
+    const cards = document.querySelectorAll("[data-drag-card]");
+    var newDrop = ds.current.index;
+    cards.forEach(function(card, i) {
+      const r = card.getBoundingClientRect();
+      if (clientY > r.top + r.height / 2) newDrop = i;
+    });
+
+    if (newDrop !== ds.current.dropIndex) {
+      ds.current.dropIndex = newDrop;
+      setDropIndexRef.current(newDrop); // triggers re-render with fresh dropIndex
+    }
+  };
+
+  handleUp.current = function() {
+    if (!ds.current) return;
+    if (ds.current.ghostEl && ds.current.ghostEl.parentNode) {
+      ds.current.ghostEl.parentNode.removeChild(ds.current.ghostEl);
+    }
+    const from = ds.current.index;
+    const to   = ds.current.dropIndex;
+    if (from !== to) {
+      setItemsRef.current(function(prev) {
+        const arr  = prev.slice();
+        const item = arr.splice(from, 1)[0];
+        arr.splice(to, 0, item);
+        return arr;
+      });
+    }
+    ds.current = null;
+    setDragIndexRef.current(null);
+    setDropIndexRef.current(null);
+    setDragCardHeightRef.current(0);
+    window.removeEventListener("mousemove", moveProxy);
+    window.removeEventListener("touchmove", moveProxy);
+    window.removeEventListener("mouseup",   upProxy);
+    window.removeEventListener("touchend",  upProxy);
+  };
+
+  // Stable proxy functions — safe to add/remove from window
+  function moveProxy(e) { handleMove.current(e); }
+  function upProxy()    { handleUp.current();    }
+
+  const startDrag = function(e, id, index, containerEl) {
     e.preventDefault();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const rect = containerEl.getBoundingClientRect();
 
-    // Ghost — fully opaque, lifted with shadow, no border flash
     const ghost = document.createElement("div");
     ghost.style.cssText = [
-      "position:fixed",
-      "zIndex:9999",
-      "pointerEvents:none",
-      "width:" + rect.width + "px",
+      "position:fixed", "zIndex:9999", "pointerEvents:none",
+      "width:"  + rect.width  + "px",
       "height:" + rect.height + "px",
       "opacity:1",
       "transform:scale(1.04) rotate(-1deg)",
-      "transition:transform 0.12s",
       "borderRadius:10px",
-      "boxShadow:0 16px 48px rgba(0,0,0,0.85), 0 0 0 1px rgba(201,168,76,0.5)",
+      "boxShadow:0 16px 48px rgba(0,0,0,0.85),0 0 0 2px rgba(201,168,76,0.6)",
       "left:" + rect.left + "px",
-      "top:" + rect.top + "px",
+      "top:"  + rect.top  + "px",
       "background:#1a1f2e",
       "overflow:hidden",
     ].join(";");
     ghost.innerHTML = containerEl.innerHTML;
     document.body.appendChild(ghost);
 
-    dragState.current = {
+    ds.current = {
       id, index, dropIndex: index,
-      offsetX: clientX - rect.left, offsetY: clientY - rect.top,
+      offsetX: clientX - rect.left,
+      offsetY: clientY - rect.top,
       ghostEl: ghost,
     };
 
-    setDragIndex(index);
-    setDropIndex(index);
-    setDragCardHeight(rect.height + 10); // +10 for margin
-  };
+    setDragIndexRef.current(index);
+    setDropIndexRef.current(index);
+    setDragCardHeightRef.current(rect.height + 10);
 
-  const onPointerMove = (e) => {
-    if (!dragState.current) return;
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const ds = dragState.current;
-
-    ds.ghostEl.style.left = (clientX - ds.offsetX) + "px";
-    ds.ghostEl.style.top  = (clientY - ds.offsetY) + "px";
-
-    // Determine drop index purely by vertical midpoint comparison
-    const cards = document.querySelectorAll("[data-drag-card]");
-    let newDrop = ds.index;
-    cards.forEach(function(card, i) {
-      const r = card.getBoundingClientRect();
-      const midY = r.top + r.height / 2;
-      if (clientY > midY) newDrop = i;
-    });
-    if (newDrop !== ds.dropIndex) {
-      ds.dropIndex = newDrop;
-      setDropIndex(newDrop);
-    }
-  };
-
-  const onPointerUp = () => {
-    if (!dragState.current) return;
-    const ds = dragState.current;
-    if (ds.ghostEl && ds.ghostEl.parentNode) ds.ghostEl.parentNode.removeChild(ds.ghostEl);
-
-    const from = ds.index;
-    const to = ds.dropIndex != null ? ds.dropIndex : from;
-    if (from !== to) {
-      setItems(function(prev) {
-        const arr = prev.slice();
-        const item = arr.splice(from, 1)[0];
-        arr.splice(to, 0, item);
-        return arr;
-      });
-    }
-
-    dragState.current = null;
-    setDragIndex(null);
-    setDropIndex(null);
-    setDragCardHeight(0);
-  };
-
-  const startDrag = (e, id, index, el) => {
-    onDragStart(e, id, index, el);
-    window.addEventListener("mousemove", onPointerMove);
-    window.addEventListener("touchmove", onPointerMove, { passive: false });
-    window.addEventListener("mouseup", cleanup);
-    window.addEventListener("touchend", cleanup);
-  };
-
-  const cleanup = () => {
-    onPointerUp();
-    window.removeEventListener("mousemove", onPointerMove);
-    window.removeEventListener("touchmove", onPointerMove);
-    window.removeEventListener("mouseup", cleanup);
-    window.removeEventListener("touchend", cleanup);
+    window.addEventListener("mousemove", moveProxy);
+    window.addEventListener("touchmove", moveProxy, { passive: false });
+    window.addEventListener("mouseup",   upProxy);
+    window.addEventListener("touchend",  upProxy);
   };
 
   return { startDrag, dragIndex, dropIndex, dragCardHeight };
