@@ -1049,49 +1049,47 @@ function DiceModal({ onClose, closing }) {
 
 // ── Drag-to-reorder hook ───────────────────────────────────────────────────────
 function useDragReorder(items, setItems) {
-  const dragState = useRef(null); // { id, startIndex, currentIndex, startX, startY, ghostEl, containerEl }
-  const [dragIndex, setDragIndex] = useState(null); // index being dragged (for placeholder)
-  const [dropIndex, setDropIndex] = useState(null); // current drop target
+  const dragState = useRef(null);
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dropIndex, setDropIndex] = useState(null);
+  const [dragCardHeight, setDragCardHeight] = useState(0);
 
   const onDragStart = (e, id, index, containerEl) => {
     e.preventDefault();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const rect = containerEl.getBoundingClientRect();
 
-    // Build ghost element from the source card
-    const sourceEl = containerEl;
-    const rect = sourceEl.getBoundingClientRect();
-
+    // Ghost — fully opaque, lifted with shadow, no border flash
     const ghost = document.createElement("div");
     ghost.style.cssText = [
       "position:fixed",
       "zIndex:9999",
       "pointerEvents:none",
       "width:" + rect.width + "px",
-      "opacity:0.85",
-      "transform:scale(1.03)",
-      "transition:transform 0.1s",
+      "height:" + rect.height + "px",
+      "opacity:1",
+      "transform:scale(1.04) rotate(-1deg)",
+      "transition:transform 0.12s",
       "borderRadius:10px",
-      "boxShadow:0 8px 32px rgba(0,0,0,0.7)",
+      "boxShadow:0 16px 48px rgba(0,0,0,0.85), 0 0 0 1px rgba(201,168,76,0.5)",
       "left:" + rect.left + "px",
       "top:" + rect.top + "px",
       "background:#1a1f2e",
-      "border:1px solid #c9a84c88",
       "overflow:hidden",
     ].join(";");
-    ghost.innerHTML = sourceEl.innerHTML;
-    ghost.style.height = rect.height + "px";
+    ghost.innerHTML = containerEl.innerHTML;
     document.body.appendChild(ghost);
 
     dragState.current = {
-      id, index,
-      startX: clientX, startY: clientY,
+      id, index, dropIndex: index,
       offsetX: clientX - rect.left, offsetY: clientY - rect.top,
-      ghostEl: ghost, rect,
+      ghostEl: ghost,
     };
 
     setDragIndex(index);
     setDropIndex(index);
+    setDragCardHeight(rect.height + 10); // +10 for margin
   };
 
   const onPointerMove = (e) => {
@@ -1100,33 +1098,28 @@ function useDragReorder(items, setItems) {
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const ds = dragState.current;
 
-    // Move ghost
     ds.ghostEl.style.left = (clientX - ds.offsetX) + "px";
     ds.ghostEl.style.top  = (clientY - ds.offsetY) + "px";
 
-    // Find drop index by scanning all card elements
+    // Determine drop index purely by vertical midpoint comparison
     const cards = document.querySelectorAll("[data-drag-card]");
-    let best = ds.index;
-    let bestDist = Infinity;
+    let newDrop = ds.index;
     cards.forEach(function(card, i) {
       const r = card.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      const dist = Math.abs(clientX - cx) * 0.5 + Math.abs(clientY - cy);
-      if (dist < bestDist) { bestDist = dist; best = i; }
+      const midY = r.top + r.height / 2;
+      if (clientY > midY) newDrop = i;
     });
-    setDropIndex(best);
-    dragState.current.dropIndex = best;
+    if (newDrop !== ds.dropIndex) {
+      ds.dropIndex = newDrop;
+      setDropIndex(newDrop);
+    }
   };
 
   const onPointerUp = () => {
     if (!dragState.current) return;
     const ds = dragState.current;
-
-    // Remove ghost
     if (ds.ghostEl && ds.ghostEl.parentNode) ds.ghostEl.parentNode.removeChild(ds.ghostEl);
 
-    // Reorder
     const from = ds.index;
     const to = ds.dropIndex != null ? ds.dropIndex : from;
     if (from !== to) {
@@ -1141,9 +1134,9 @@ function useDragReorder(items, setItems) {
     dragState.current = null;
     setDragIndex(null);
     setDropIndex(null);
+    setDragCardHeight(0);
   };
 
-  // Attach global listeners
   const startDrag = (e, id, index, el) => {
     onDragStart(e, id, index, el);
     window.addEventListener("mousemove", onPointerMove);
@@ -1160,14 +1153,14 @@ function useDragReorder(items, setItems) {
     window.removeEventListener("touchend", cleanup);
   };
 
-  return { startDrag, dragIndex, dropIndex };
+  return { startDrag, dragIndex, dropIndex, dragCardHeight };
 }
 
 function TokenTrackerScreen({ onBack, tokens, setTokens }) {
   const [eotFlash, setEotFlash] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [layout, setLayout] = useState("list");
-  const { startDrag, dragIndex, dropIndex } = useDragReorder(tokens, setTokens);
+  const { startDrag, dragIndex, dropIndex, dragCardHeight } = useDragReorder(tokens, setTokens);
 
   const removeToken = (id) => setTokens(t => t.filter(tok => tok.id !== id));
   const updateToken = useCallback((id, patch) => {
@@ -1322,8 +1315,8 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
         )}
 
         {layout === "list" && tokens.map((tok, i) => (
-          <TokenCard key={tok.id} tok={tok} dragIndex={i}
-            isDragging={dragIndex === i} isDropTarget={dropIndex === i && dragIndex !== i}
+          <TokenCard key={tok.id} tok={tok} myIndex={i}
+            isDragging={dragIndex === i} activeDragIndex={dragIndex} dropIndex={dropIndex} dragCardHeight={dragCardHeight}
             onDragStart={startDrag}
             displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
             updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
@@ -1338,8 +1331,8 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
             gap: 10,
           }}>
             {tokens.map((tok, i) => (
-              <TokenCardGrid key={tok.id} tok={tok} dragIndex={i}
-                isDragging={dragIndex === i} isDropTarget={dropIndex === i && dragIndex !== i}
+              <TokenCardGrid key={tok.id} tok={tok} myIndex={i}
+                isDragging={dragIndex === i} activeDragIndex={dragIndex} dropIndex={dropIndex} dragCardHeight={dragCardHeight}
                 onDragStart={startDrag}
                 displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
                 updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
@@ -1924,7 +1917,7 @@ function ManaBtn({ s, onClick }) {
 
 
 // ── Token Card Grid (portrait MTG-card style) ──────────────────────────────────
-function TokenCardGrid({ tok, dragIndex, isDragging, isDropTarget, onDragStart, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
+function TokenCardGrid({ tok, myIndex, isDragging, activeDragIndex, dropIndex, dragCardHeight, onDragStart, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
   const [expanded, setExpanded] = useState(false);
   const [showCounterMenu, setShowCounterMenu] = useState(false);
 
@@ -1943,6 +1936,19 @@ function TokenCardGrid({ tok, dragIndex, isDragging, isDropTarget, onDragStart, 
   const isMulti = (tok.colors || []).length > 1;
   const borderColor = allTapped ? COLORS.tap : hasEotMod ? COLORS.eot : accent;
 
+  const isDragActive = dragCardHeight > 0;
+  var pushYGrid = 0;
+  if (isDragActive && activeDragIndex !== null && dropIndex !== null && activeDragIndex !== dropIndex) {
+    var gFrom = activeDragIndex;
+    var gTo = dropIndex;
+    var gMe = myIndex;
+    if (gFrom > gTo) {
+      if (gMe >= gTo && gMe < gFrom) pushYGrid = dragCardHeight;
+    } else {
+      if (gMe > gFrom && gMe <= gTo) pushYGrid = -dragCardHeight;
+    }
+  }
+
   const cardBorderStyle = isMulti && !allTapped && !hasEotMod ? {
     border: `1px solid ${borderColor}44`,
     backgroundImage: `linear-gradient(#1a1f2e, #1a1f2e), ${gradient}`,
@@ -1959,13 +1965,12 @@ function TokenCardGrid({ tok, dragIndex, isDragging, isDropTarget, onDragStart, 
       borderRadius: 12,
       overflow: "hidden",
       position: "relative",
-      opacity: isDragging ? 0.3 : allTapped ? 0.7 : 1,
-      transition: "all 0.2s ease",
-      transform: isDropTarget ? "scale(1.03)" : "none",
-      boxShadow: isDropTarget ? ("0 0 18px " + COLORS.gold + "66") : allTapped ? "none" : hasEotMod ? ("0 2px 16px " + COLORS.eot + "44") : ("0 2px 14px " + accent + "33"),
+      opacity: isDragging ? 0.25 : allTapped ? 0.7 : 1,
+      transition: isDragActive ? "transform 0.18s ease, opacity 0.15s" : "all 0.2s ease",
+      transform: isDragging ? "none" : ("translateY(" + pushYGrid + "px)"),
+      boxShadow: allTapped ? "none" : hasEotMod ? ("0 2px 16px " + COLORS.eot + "44") : ("0 2px 14px " + accent + "33"),
       display: "flex", flexDirection: "column",
       ...cardBorderStyle,
-      ...(isDropTarget ? { border: ("2px solid " + COLORS.gold + "cc") } : {}),
     }}>
 
       {/* ── Art section (top ~55% of card) ── */}
@@ -2147,8 +2152,8 @@ function TokenCardGrid({ tok, dragIndex, isDragging, isDropTarget, onDragStart, 
         {/* Drag handle + Expand toggle */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
           <div
-            onMouseDown={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, dragIndex, el); }}
-            onTouchStart={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, dragIndex, el); }}
+            onMouseDown={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, myIndex, el); }}
+            onTouchStart={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, myIndex, el); }}
             style={{
               cursor: "grab", color: COLORS.border, fontSize: 16,
               padding: "3px 4px", userSelect: "none",
@@ -2281,7 +2286,7 @@ function TokenCardGrid({ tok, dragIndex, isDragging, isDropTarget, onDragStart, 
 }
 
 // ── Token Card ─────────────────────────────────────────────────────────────────
-function TokenCard({ tok, dragIndex, isDragging, isDropTarget, onDragStart, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
+function TokenCard({ tok, dragIndex, isDragging, dropIndex, dragCardHeight, onDragStart, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
   const [expanded, setExpanded] = useState(false);
   const [showCounterMenu, setShowCounterMenu] = useState(false);
 
@@ -2300,23 +2305,64 @@ function TokenCard({ tok, dragIndex, isDragging, isDropTarget, onDragStart, disp
   const isMulti = (tok.colors || []).length > 1;
   const borderColor = allTapped ? COLORS.tap : hasEotMod ? COLORS.eot : accent;
 
+  // Push animation: cards at/below drop target shift down to make room
+  const isDragActive = dragCardHeight > 0;
+  const isPushed = isDragActive && dropIndex !== null && dragIndex !== null
+    && dragIndex !== dropIndex
+    && dragIndex !== null
+    && (dropIndex <= dragIndex
+        ? (dragIndex !== null && dragIndex !== dropIndex && dragIndex > dropIndex
+            ? (tok && dragIndex > dropIndex ? dragIndex > dropIndex : false)
+            : false)
+        : false);
+  // Simpler: card is pushed if drag is active AND this card's index is between dropIndex and dragIndex
+  const shouldPush = isDragActive && dragIndex !== null && dropIndex !== null && dragIndex !== dropIndex && (
+    dragIndex > dropIndex
+      ? (dragIndex >= dragIndex && dragIndex <= dragIndex) // placeholder — compute below
+      : false
+  );
+  // Clean version:
+  const pushDown = isDragActive && dragIndex !== null && dropIndex !== null && dragIndex !== dropIndex
+    ? (dropIndex < dragIndex
+        ? (dragIndex >= dropIndex && dragIndex < dragIndex ? dragCardHeight : 0) // cards between drop and drag shift down
+        : (dragIndex > dropIndex
+            ? 0
+            : 0))
+    : 0;
+  // Simplest correct version: if dragging, cards whose index is in [dropIndex, dragIndex) shift down;
+  // if dragging forward, cards in (dragIndex, dropIndex] shift up.
+  const computePush = () => {
+    if (!isDragActive || dragIndex === null || dropIndex === null || dragIndex === dropIndex) return 0;
+    const i = dragIndex;  // this card's index
+    const from = dragIndex; // being dragged
+    const to = dropIndex;   // where it's going
+    if (from > to) {
+      // dragging up: cards between to and from-1 shift down
+      return (dragIndex >= to && dragIndex < from) ? dragCardHeight : 0;
+    } else {
+      // dragging down: cards between from+1 and to shift up
+      return (dragIndex > from && dragIndex <= to) ? -dragCardHeight : 0;
+    }
+  };
+  const pushY = computePush();
+
   return (
     <div data-drag-card style={{
       background: "#1a1f2e",
-      border: `1px solid ${isDropTarget ? COLORS.gold + "cc" : borderColor + "44"}`,
+      border: `1px solid ${borderColor + "44"}`,
       borderRadius: 10, marginBottom: 10,
-      opacity: isDragging ? 0.35 : allTapped ? 0.72 : 1,
-      transition: "all 0.2s ease",
+      opacity: isDragging ? 0.25 : allTapped ? 0.72 : 1,
+      transition: isDragActive ? "transform 0.18s ease, opacity 0.15s" : "all 0.2s ease",
       overflow: "hidden", position: "relative",
-      transform: isDropTarget ? "scale(1.01)" : "none",
-      boxShadow: isDropTarget ? `0 0 16px ${COLORS.gold}55` : hasEotMod ? `0 2px 14px ${COLORS.eot}28` : someTapped ? "none" : `0 2px 12px ${accent}22`,
+      transform: isDragging ? "none" : ("translateY(" + pushY + "px)"),
+      boxShadow: hasEotMod ? `0 2px 14px ${COLORS.eot}28` : someTapped ? "none" : `0 2px 12px ${accent}22`,
       ...(isMulti && !allTapped && !hasEotMod ? {
         borderLeft: "3px solid transparent",
         backgroundImage: `linear-gradient(#1a1f2e, #1a1f2e), ${gradient}`,
         backgroundOrigin: "border-box",
         backgroundClip: "padding-box, border-box",
       } : {
-        borderLeft: `3px solid ${isDropTarget ? COLORS.gold : borderColor}`,
+        borderLeft: `3px solid ${borderColor}`,
       }),
     }}>
       {/* Art overlay — right spacer keeps dropdown clear, edge-to-edge height */}
