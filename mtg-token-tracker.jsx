@@ -1046,10 +1046,128 @@ function DiceModal({ onClose, closing }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── Token Tracker Screen (existing tracker wrapped) ───────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
+
+// ── Drag-to-reorder hook ───────────────────────────────────────────────────────
+function useDragReorder(items, setItems) {
+  const dragState = useRef(null); // { id, startIndex, currentIndex, startX, startY, ghostEl, containerEl }
+  const [dragIndex, setDragIndex] = useState(null); // index being dragged (for placeholder)
+  const [dropIndex, setDropIndex] = useState(null); // current drop target
+
+  const onDragStart = (e, id, index, containerEl) => {
+    e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    // Build ghost element from the source card
+    const sourceEl = containerEl;
+    const rect = sourceEl.getBoundingClientRect();
+
+    const ghost = document.createElement("div");
+    ghost.style.cssText = [
+      "position:fixed",
+      "zIndex:9999",
+      "pointerEvents:none",
+      "width:" + rect.width + "px",
+      "opacity:0.85",
+      "transform:scale(1.03)",
+      "transition:transform 0.1s",
+      "borderRadius:10px",
+      "boxShadow:0 8px 32px rgba(0,0,0,0.7)",
+      "left:" + rect.left + "px",
+      "top:" + rect.top + "px",
+      "background:#1a1f2e",
+      "border:1px solid #c9a84c88",
+      "overflow:hidden",
+    ].join(";");
+    ghost.innerHTML = sourceEl.innerHTML;
+    ghost.style.height = rect.height + "px";
+    document.body.appendChild(ghost);
+
+    dragState.current = {
+      id, index,
+      startX: clientX, startY: clientY,
+      offsetX: clientX - rect.left, offsetY: clientY - rect.top,
+      ghostEl: ghost, rect,
+    };
+
+    setDragIndex(index);
+    setDropIndex(index);
+  };
+
+  const onPointerMove = (e) => {
+    if (!dragState.current) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const ds = dragState.current;
+
+    // Move ghost
+    ds.ghostEl.style.left = (clientX - ds.offsetX) + "px";
+    ds.ghostEl.style.top  = (clientY - ds.offsetY) + "px";
+
+    // Find drop index by scanning all card elements
+    const cards = document.querySelectorAll("[data-drag-card]");
+    let best = ds.index;
+    let bestDist = Infinity;
+    cards.forEach(function(card, i) {
+      const r = card.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dist = Math.abs(clientX - cx) * 0.5 + Math.abs(clientY - cy);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    });
+    setDropIndex(best);
+    dragState.current.dropIndex = best;
+  };
+
+  const onPointerUp = () => {
+    if (!dragState.current) return;
+    const ds = dragState.current;
+
+    // Remove ghost
+    if (ds.ghostEl && ds.ghostEl.parentNode) ds.ghostEl.parentNode.removeChild(ds.ghostEl);
+
+    // Reorder
+    const from = ds.index;
+    const to = ds.dropIndex != null ? ds.dropIndex : from;
+    if (from !== to) {
+      setItems(function(prev) {
+        const arr = prev.slice();
+        const item = arr.splice(from, 1)[0];
+        arr.splice(to, 0, item);
+        return arr;
+      });
+    }
+
+    dragState.current = null;
+    setDragIndex(null);
+    setDropIndex(null);
+  };
+
+  // Attach global listeners
+  const startDrag = (e, id, index, el) => {
+    onDragStart(e, id, index, el);
+    window.addEventListener("mousemove", onPointerMove);
+    window.addEventListener("touchmove", onPointerMove, { passive: false });
+    window.addEventListener("mouseup", cleanup);
+    window.addEventListener("touchend", cleanup);
+  };
+
+  const cleanup = () => {
+    onPointerUp();
+    window.removeEventListener("mousemove", onPointerMove);
+    window.removeEventListener("touchmove", onPointerMove);
+    window.removeEventListener("mouseup", cleanup);
+    window.removeEventListener("touchend", cleanup);
+  };
+
+  return { startDrag, dragIndex, dropIndex };
+}
+
 function TokenTrackerScreen({ onBack, tokens, setTokens }) {
   const [eotFlash, setEotFlash] = useState(false);
   const [confirm, setConfirm] = useState(null);
-  const [layout, setLayout] = useState("list"); // "list" | "grid" 
+  const [layout, setLayout] = useState("list");
+  const { startDrag, dragIndex, dropIndex } = useDragReorder(tokens, setTokens);
 
   const removeToken = (id) => setTokens(t => t.filter(tok => tok.id !== id));
   const updateToken = useCallback((id, patch) => {
@@ -1203,8 +1321,10 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
           </div>
         )}
 
-        {layout === "list" && tokens.map(tok => (
-          <TokenCard key={tok.id} tok={tok}
+        {layout === "list" && tokens.map((tok, i) => (
+          <TokenCard key={tok.id} tok={tok} dragIndex={i}
+            isDragging={dragIndex === i} isDropTarget={dropIndex === i && dragIndex !== i}
+            onDragStart={startDrag}
             displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
             updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
             tapOne={tapOne} untapOne={untapOne} removeToken={removeToken}
@@ -1217,8 +1337,10 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
             gridTemplateColumns: "repeat(2, 1fr)",
             gap: 10,
           }}>
-            {tokens.map(tok => (
-              <TokenCardGrid key={tok.id} tok={tok}
+            {tokens.map((tok, i) => (
+              <TokenCardGrid key={tok.id} tok={tok} dragIndex={i}
+                isDragging={dragIndex === i} isDropTarget={dropIndex === i && dragIndex !== i}
+                onDragStart={startDrag}
                 displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
                 updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
                 tapOne={tapOne} untapOne={untapOne} removeToken={removeToken}
@@ -1802,7 +1924,7 @@ function ManaBtn({ s, onClick }) {
 
 
 // ── Token Card Grid (portrait MTG-card style) ──────────────────────────────────
-function TokenCardGrid({ tok, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
+function TokenCardGrid({ tok, dragIndex, isDragging, isDropTarget, onDragStart, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
   const [expanded, setExpanded] = useState(false);
   const [showCounterMenu, setShowCounterMenu] = useState(false);
 
@@ -1832,16 +1954,18 @@ function TokenCardGrid({ tok, displayType, effectivePower, effectiveToughness, u
   };
 
   return (
-    <div style={{
+    <div data-drag-card style={{
       background: "#1a1f2e",
       borderRadius: 12,
       overflow: "hidden",
       position: "relative",
-      opacity: allTapped ? 0.7 : 1,
+      opacity: isDragging ? 0.3 : allTapped ? 0.7 : 1,
       transition: "all 0.2s ease",
-      boxShadow: allTapped ? "none" : hasEotMod ? ("0 2px 16px " + COLORS.eot + "44") : ("0 2px 14px " + accent + "33"),
+      transform: isDropTarget ? "scale(1.03)" : "none",
+      boxShadow: isDropTarget ? ("0 0 18px " + COLORS.gold + "66") : allTapped ? "none" : hasEotMod ? ("0 2px 16px " + COLORS.eot + "44") : ("0 2px 14px " + accent + "33"),
       display: "flex", flexDirection: "column",
       ...cardBorderStyle,
+      ...(isDropTarget ? { border: ("2px solid " + COLORS.gold + "cc") } : {}),
     }}>
 
       {/* ── Art section (top ~55% of card) ── */}
@@ -2020,8 +2144,18 @@ function TokenCardGrid({ tok, displayType, effectivePower, effectiveToughness, u
           </div>
         )}
 
-        {/* Expand toggle */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
+        {/* Drag handle + Expand toggle */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
+          <div
+            onMouseDown={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, dragIndex, el); }}
+            onTouchStart={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, dragIndex, el); }}
+            style={{
+              cursor: "grab", color: COLORS.border, fontSize: 16,
+              padding: "3px 4px", userSelect: "none",
+              filter: ("drop-shadow(0 0 3px " + accent + "44)"),
+            }}
+            title="Drag to reorder"
+          >⠿</div>
           <button onClick={() => setExpanded(e => !e)} style={{
             background: expanded ? accent + "28" : "#ffffff0f",
             border: ("1px solid " + (expanded ? accent + "99" : COLORS.border + "aa")),
@@ -2147,7 +2281,7 @@ function TokenCardGrid({ tok, displayType, effectivePower, effectiveToughness, u
 }
 
 // ── Token Card ─────────────────────────────────────────────────────────────────
-function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
+function TokenCard({ tok, dragIndex, isDragging, isDropTarget, onDragStart, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
   const [expanded, setExpanded] = useState(false);
   const [showCounterMenu, setShowCounterMenu] = useState(false);
 
@@ -2167,21 +2301,22 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
   const borderColor = allTapped ? COLORS.tap : hasEotMod ? COLORS.eot : accent;
 
   return (
-    <div style={{
+    <div data-drag-card style={{
       background: "#1a1f2e",
-      border: `1px solid ${borderColor}44`,
+      border: `1px solid ${isDropTarget ? COLORS.gold + "cc" : borderColor + "44"}`,
       borderRadius: 10, marginBottom: 10,
-      opacity: allTapped ? 0.72 : 1,
+      opacity: isDragging ? 0.35 : allTapped ? 0.72 : 1,
       transition: "all 0.2s ease",
       overflow: "hidden", position: "relative",
-      boxShadow: hasEotMod ? `0 2px 14px ${COLORS.eot}28` : someTapped ? "none" : `0 2px 12px ${accent}22`,
+      transform: isDropTarget ? "scale(1.01)" : "none",
+      boxShadow: isDropTarget ? `0 0 16px ${COLORS.gold}55` : hasEotMod ? `0 2px 14px ${COLORS.eot}28` : someTapped ? "none" : `0 2px 12px ${accent}22`,
       ...(isMulti && !allTapped && !hasEotMod ? {
         borderLeft: "3px solid transparent",
         backgroundImage: `linear-gradient(#1a1f2e, #1a1f2e), ${gradient}`,
         backgroundOrigin: "border-box",
         backgroundClip: "padding-box, border-box",
       } : {
-        borderLeft: `3px solid ${borderColor}`,
+        borderLeft: `3px solid ${isDropTarget ? COLORS.gold : borderColor}`,
       }),
     }}>
       {/* Art overlay — right spacer keeps dropdown clear, edge-to-edge height */}
@@ -2204,6 +2339,19 @@ function TokenCard({ tok, displayType, effectivePower, effectiveToughness, updat
       )}
       {/* Main Row */}
       <div style={{ display: "flex", alignItems: "center", padding: "10px 12px", gap: 10, position: "relative", zIndex: 1 }}>
+
+        {/* Drag Handle */}
+        <div
+          onMouseDown={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, dragIndex, el); }}
+          onTouchStart={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, dragIndex, el); }}
+          style={{
+            cursor: "grab", color: COLORS.border, fontSize: 14,
+            padding: "4px 2px", flexShrink: 0, userSelect: "none",
+            display: "flex", alignItems: "center",
+            filter: `drop-shadow(0 0 3px ${accent}44)`,
+          }}
+          title="Drag to reorder"
+        >⠿</div>
 
         {/* Tap Controls */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flexShrink: 0 }}>
