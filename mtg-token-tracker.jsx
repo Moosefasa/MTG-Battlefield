@@ -204,6 +204,8 @@ styleTag.textContent = `
   @keyframes modalSlideDown { from{transform:translateY(0);opacity:1} to{transform:translateY(100%);opacity:0.6} }
   @keyframes formSlideUp    { from{transform:translateY(100%)} to{transform:translateY(0)} }
   @keyframes formSlideDown  { from{transform:translateY(0)} to{transform:translateY(100%)} }
+  @keyframes cardSettle     { from{transform:translateY(-18px);opacity:0.4} to{transform:translateY(0);opacity:1} }
+  @keyframes cardSettleDown { from{transform:translateY(18px);opacity:0.4}  to{transform:translateY(0);opacity:1} }
 `;
 if (!document.head.querySelector("#bf-styles")) {
   styleTag.id = "bf-styles";
@@ -1047,133 +1049,21 @@ function DiceModal({ onClose, closing }) {
 // ── Token Tracker Screen (existing tracker wrapped) ───────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── Drag-to-reorder hook ───────────────────────────────────────────────────────
-function useDragReorder(items, setItems) {
-  // All mutable drag state lives in a ref so event handlers always see current values
-  const ds = useRef(null); // { id, index, dropIndex, offsetX, offsetY, ghostEl, cardHeight }
-
-  // These three drive re-renders — updated via the ref's scheduler
-  const [dragIndex,     setDragIndex]     = useState(null);
-  const [dropIndex,     setDropIndex]     = useState(null);
-  const [dragCardHeight,setDragCardHeight]= useState(0);
-
-  // Keep setItems stable in the ref so cleanup can call it without stale closure
-  const setItemsRef = useRef(setItems);
-  setItemsRef.current = setItems;
-
-  // Stable refs for the three state setters — never go stale
-  const setDragIndexRef     = useRef(setDragIndex);
-  const setDropIndexRef     = useRef(setDropIndex);
-  const setDragCardHeightRef= useRef(setDragCardHeight);
-
-  const handleMove = useRef(null);
-  const handleUp   = useRef(null);
-
-  handleMove.current = function(e) {
-    if (!ds.current) return;
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-    // Move ghost
-    ds.current.ghostEl.style.left = (clientX - ds.current.offsetX) + "px";
-    ds.current.ghostEl.style.top  = (clientY - ds.current.offsetY) + "px";
-
-    // Compute new drop index from card midpoints
-    const cards = document.querySelectorAll("[data-drag-card]");
-    var newDrop = ds.current.index;
-    cards.forEach(function(card, i) {
-      const r = card.getBoundingClientRect();
-      if (clientY > r.top + r.height / 2) newDrop = i;
-    });
-
-    if (newDrop !== ds.current.dropIndex) {
-      ds.current.dropIndex = newDrop;
-      setDropIndexRef.current(newDrop); // triggers re-render with fresh dropIndex
-    }
-  };
-
-  handleUp.current = function() {
-    if (!ds.current) return;
-    if (ds.current.ghostEl && ds.current.ghostEl.parentNode) {
-      ds.current.ghostEl.parentNode.removeChild(ds.current.ghostEl);
-    }
-    const from = ds.current.index;
-    const to   = ds.current.dropIndex;
-    if (from !== to) {
-      setItemsRef.current(function(prev) {
-        const arr  = prev.slice();
-        const item = arr.splice(from, 1)[0];
-        arr.splice(to, 0, item);
-        return arr;
-      });
-    }
-    ds.current = null;
-    setDragIndexRef.current(null);
-    setDropIndexRef.current(null);
-    setDragCardHeightRef.current(0);
-    window.removeEventListener("mousemove", moveProxy);
-    window.removeEventListener("touchmove", moveProxy);
-    window.removeEventListener("mouseup",   upProxy);
-    window.removeEventListener("touchend",  upProxy);
-  };
-
-  // Stable proxy functions — safe to add/remove from window
-  function moveProxy(e) { handleMove.current(e); }
-  function upProxy()    { handleUp.current();    }
-
-  const startDrag = function(e, id, index, containerEl) {
-    e.preventDefault();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const rect = containerEl.getBoundingClientRect();
-
-    const ghost = document.createElement("div");
-    // Simple visual ghost — no innerHTML cloning which breaks layout
-    ghost.style.cssText = [
-      "position:fixed", "zIndex:9999", "pointerEvents:none",
-      "width:"  + rect.width  + "px",
-      "height:" + rect.height + "px",
-      "borderRadius:10px",
-      "background:#1a1f2e",
-      "border:2px solid rgba(201,168,76,0.7)",
-      "boxShadow:0 16px 48px rgba(0,0,0,0.85),0 0 20px rgba(201,168,76,0.3)",
-      "transform:scale(1.04) rotate(-1deg)",
-      "left:" + rect.left + "px",
-      "top:"  + rect.top  + "px",
-      "display:flex", "alignItems:center", "justifyContent:center",
-      "overflow:hidden",
-    ].join(";");
-    // Inner label so you can see what you're dragging
-    ghost.innerHTML = '<div style="color:#c9a84c;font-size:13px;font-weight:bold;opacity:0.7;pointer-events:none;">⠿ moving</div>';
-    document.body.appendChild(ghost);
-
-    ds.current = {
-      id, index, dropIndex: index,
-      offsetX: clientX - rect.left,
-      offsetY: clientY - rect.top,
-      ghostEl: ghost,
-    };
-
-    setDragIndexRef.current(index);
-    setDropIndexRef.current(index);
-    setDragCardHeightRef.current(rect.height + 10);
-
-    window.addEventListener("mousemove", moveProxy);
-    window.addEventListener("touchmove", moveProxy, { passive: false });
-    window.addEventListener("mouseup",   upProxy);
-    window.addEventListener("touchend",  upProxy);
-  };
-
-  return { startDrag, dragIndex, dropIndex, dragCardHeight };
-}
 
 function TokenTrackerScreen({ onBack, tokens, setTokens }) {
   const [eotFlash, setEotFlash] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [layout, setLayout] = useState("list");
-  const { startDrag, dragIndex, dropIndex, dragCardHeight } = useDragReorder(tokens, setTokens);
 
   const removeToken = (id) => setTokens(t => t.filter(tok => tok.id !== id));
+  const moveToken = (id, dir) => setTokens(prev => {
+    const idx = prev.findIndex(t => t.id === id);
+    const next = idx + dir;
+    if (next < 0 || next >= prev.length) return prev;
+    const arr = prev.slice();
+    const tmp = arr[idx]; arr[idx] = arr[next]; arr[next] = tmp;
+    return arr;
+  });
   const updateToken = useCallback((id, patch) => {
     setTokens(t => t.map(tok => tok.id === id ? { ...tok, ...patch } : tok));
   }, []);
@@ -1326,12 +1216,10 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
         )}
 
         {layout === "list" && tokens.map((tok, i) => (
-          <TokenCard key={tok.id} tok={tok} myIndex={i}
-            isDragging={dragIndex === i} activeDragIndex={dragIndex} dropIndex={dropIndex} dragCardHeight={dragCardHeight}
-            onDragStart={startDrag}
+          <TokenCard key={tok.id + "-" + i} tok={tok} tokIndex={i} totalTokens={tokens.length}
             displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
             updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
-            tapOne={tapOne} untapOne={untapOne} removeToken={removeToken}
+            tapOne={tapOne} untapOne={untapOne} removeToken={removeToken} moveToken={moveToken}
           />
         ))}
 
@@ -1342,12 +1230,10 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
             gap: 10,
           }}>
             {tokens.map((tok, i) => (
-              <TokenCardGrid key={tok.id} tok={tok} myIndex={i}
-                isDragging={dragIndex === i} activeDragIndex={dragIndex} dropIndex={dropIndex} dragCardHeight={dragCardHeight}
-                onDragStart={startDrag}
+              <TokenCardGrid key={tok.id + "-" + i} tok={tok} tokIndex={i} totalTokens={tokens.length}
                 displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
                 updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
-                tapOne={tapOne} untapOne={untapOne} removeToken={removeToken}
+                tapOne={tapOne} untapOne={untapOne} removeToken={removeToken} moveToken={moveToken}
               />
             ))}
           </div>
@@ -1928,7 +1814,7 @@ function ManaBtn({ s, onClick }) {
 
 
 // ── Token Card Grid (portrait MTG-card style) ──────────────────────────────────
-function TokenCardGrid({ tok, myIndex, isDragging, activeDragIndex, dropIndex, dragCardHeight, onDragStart, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
+function TokenCardGrid({ tok, tokIndex, totalTokens, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken, moveToken }) {
   const [expanded, setExpanded] = useState(false);
   const [showCounterMenu, setShowCounterMenu] = useState(false);
 
@@ -1947,19 +1833,6 @@ function TokenCardGrid({ tok, myIndex, isDragging, activeDragIndex, dropIndex, d
   const isMulti = (tok.colors || []).length > 1;
   const borderColor = allTapped ? COLORS.tap : hasEotMod ? COLORS.eot : accent;
 
-  const isDragActive = dragCardHeight > 0;
-  var pushYGrid = 0;
-  if (isDragActive && activeDragIndex !== null && dropIndex !== null && activeDragIndex !== dropIndex) {
-    var gFrom = activeDragIndex;
-    var gTo = dropIndex;
-    var gMe = myIndex;
-    if (gFrom > gTo) {
-      if (gMe >= gTo && gMe < gFrom) pushYGrid = dragCardHeight;
-    } else {
-      if (gMe > gFrom && gMe <= gTo) pushYGrid = -dragCardHeight;
-    }
-  }
-
   const cardBorderStyle = isMulti && !allTapped && !hasEotMod ? {
     border: `1px solid ${borderColor}44`,
     backgroundImage: `linear-gradient(#1a1f2e, #1a1f2e), ${gradient}`,
@@ -1971,14 +1844,13 @@ function TokenCardGrid({ tok, myIndex, isDragging, activeDragIndex, dropIndex, d
   };
 
   return (
-    <div data-drag-card style={{
+    <div style={{
       background: "#1a1f2e",
       borderRadius: 12,
       overflow: "hidden",
       position: "relative",
-      opacity: isDragging ? 0.25 : allTapped ? 0.7 : 1,
-      transition: isDragActive ? "transform 0.18s ease, opacity 0.15s" : "all 0.2s ease",
-      transform: isDragging ? "none" : ("translateY(" + pushYGrid + "px)"),
+      opacity: allTapped ? 0.7 : 1,
+      transition: "all 0.2s ease",
       boxShadow: allTapped ? "none" : hasEotMod ? ("0 2px 16px " + COLORS.eot + "44") : ("0 2px 14px " + accent + "33"),
       display: "flex", flexDirection: "column",
       ...cardBorderStyle,
@@ -2160,18 +2032,8 @@ function TokenCardGrid({ tok, myIndex, isDragging, activeDragIndex, dropIndex, d
           </div>
         )}
 
-        {/* Drag handle + Expand toggle */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
-          <div
-            onMouseDown={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, myIndex, el); }}
-            onTouchStart={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, myIndex, el); }}
-            style={{
-              cursor: "grab", color: COLORS.border, fontSize: 16,
-              padding: "3px 4px", userSelect: "none",
-              filter: ("drop-shadow(0 0 3px " + accent + "44)"),
-            }}
-            title="Drag to reorder"
-          >⠿</div>
+        {/* Expand toggle */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
           <button onClick={() => setExpanded(e => !e)} style={{
             background: expanded ? accent + "28" : "#ffffff0f",
             border: ("1px solid " + (expanded ? accent + "99" : COLORS.border + "aa")),
@@ -2283,8 +2145,33 @@ function TokenCardGrid({ tok, myIndex, isDragging, activeDragIndex, dropIndex, d
             </div>
           </Row>
 
+          {/* Reorder */}
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <button
+              onClick={() => moveToken(tok.id, -1)}
+              disabled={tokIndex === 0}
+              style={{
+                flex: 1, padding: "5px", borderRadius: 7, cursor: "pointer",
+                fontFamily: "inherit", fontSize: 11,
+                background: COLORS.surface, border: ("1px solid " + COLORS.border),
+                color: tokIndex === 0 ? COLORS.border : COLORS.text,
+                opacity: tokIndex === 0 ? 0.35 : 1, transition: "all 0.15s",
+              }}
+            >↑ Up</button>
+            <button
+              onClick={() => moveToken(tok.id, 1)}
+              disabled={tokIndex === totalTokens - 1}
+              style={{
+                flex: 1, padding: "5px", borderRadius: 7, cursor: "pointer",
+                fontFamily: "inherit", fontSize: 11,
+                background: COLORS.surface, border: ("1px solid " + COLORS.border),
+                color: tokIndex === totalTokens - 1 ? COLORS.border : COLORS.text,
+                opacity: tokIndex === totalTokens - 1 ? 0.35 : 1, transition: "all 0.15s",
+              }}
+            >↓ Down</button>
+          </div>
           <button onClick={() => removeToken(tok.id)} style={{
-            marginTop: 10, width: "100%",
+            marginTop: 8, width: "100%",
             background: COLORS.red + "22", border: ("1px solid " + COLORS.red + "88"),
             color: COLORS.red, borderRadius: 8, padding: "7px",
             cursor: "pointer", fontFamily: "inherit", fontSize: 12, letterSpacing: 0.5,
@@ -2297,7 +2184,7 @@ function TokenCardGrid({ tok, myIndex, isDragging, activeDragIndex, dropIndex, d
 }
 
 // ── Token Card ─────────────────────────────────────────────────────────────────
-function TokenCard({ tok, dragIndex, isDragging, dropIndex, dragCardHeight, onDragStart, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken }) {
+function TokenCard({ tok, tokIndex, totalTokens, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken, moveToken }) {
   const [expanded, setExpanded] = useState(false);
   const [showCounterMenu, setShowCounterMenu] = useState(false);
 
@@ -2316,31 +2203,17 @@ function TokenCard({ tok, dragIndex, isDragging, dropIndex, dragCardHeight, onDr
   const isMulti = (tok.colors || []).length > 1;
   const borderColor = allTapped ? COLORS.tap : hasEotMod ? COLORS.eot : accent;
 
-  // Push animation: cards between drag origin and drop target translate to open a gap
-  const isDragActive = dragCardHeight > 0;
-  var pushY = 0;
-  if (isDragActive && activeDragIndex !== null && dropIndex !== null && activeDragIndex !== dropIndex) {
-    var from = activeDragIndex; // index of card being dragged
-    var to = dropIndex;         // current target position
-    var me = myIndex;           // this card's index
-    if (from > to) {
-      // dragging upward: cards in [to, from) shift down to open gap at top
-      if (me >= to && me < from) pushY = dragCardHeight;
-    } else {
-      // dragging downward: cards in (from, to] shift up to open gap at bottom
-      if (me > from && me <= to) pushY = -dragCardHeight;
-    }
-  }
+
 
   return (
-    <div data-drag-card style={{
+    <div style={{
       background: "#1a1f2e",
       border: `1px solid ${borderColor + "44"}`,
       borderRadius: 10, marginBottom: 10,
-      opacity: isDragging ? 0.25 : allTapped ? 0.72 : 1,
-      transition: isDragActive ? "transform 0.18s ease, opacity 0.15s" : "all 0.2s ease",
+      opacity: allTapped ? 0.72 : 1,
+      transition: "all 0.2s ease",
       overflow: "hidden", position: "relative",
-      transform: isDragging ? "none" : ("translateY(" + pushY + "px)"),
+      animation: "cardSettle 0.22s ease",
       boxShadow: hasEotMod ? `0 2px 14px ${COLORS.eot}28` : someTapped ? "none" : `0 2px 12px ${accent}22`,
       ...(isMulti && !allTapped && !hasEotMod ? {
         borderLeft: "3px solid transparent",
@@ -2371,19 +2244,6 @@ function TokenCard({ tok, dragIndex, isDragging, dropIndex, dragCardHeight, onDr
       )}
       {/* Main Row */}
       <div style={{ display: "flex", alignItems: "center", padding: "10px 12px", gap: 10, position: "relative", zIndex: 1 }}>
-
-        {/* Drag Handle */}
-        <div
-          onMouseDown={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, dragIndex, el); }}
-          onTouchStart={e => { const el = e.currentTarget.closest("[data-drag-card]"); onDragStart(e, tok.id, dragIndex, el); }}
-          style={{
-            cursor: "grab", color: COLORS.border, fontSize: 14,
-            padding: "4px 2px", flexShrink: 0, userSelect: "none",
-            display: "flex", alignItems: "center",
-            filter: `drop-shadow(0 0 3px ${accent}44)`,
-          }}
-          title="Drag to reorder"
-        >⠿</div>
 
         {/* Tap Controls */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flexShrink: 0 }}>
@@ -2658,8 +2518,36 @@ function TokenCard({ tok, dragIndex, isDragging, dropIndex, dragCardHeight, onDr
             </div>
           </div>
 
+          {/* Reorder */}
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button
+              onClick={() => moveToken(tok.id, -1)}
+              disabled={tokIndex === 0}
+              style={{
+                flex: 1, padding: "6px", borderRadius: 8, cursor: "pointer",
+                fontFamily: "inherit", fontSize: 13,
+                background: COLORS.surface, border: `1px solid ${COLORS.border}`,
+                color: tokIndex === 0 ? COLORS.border : COLORS.text,
+                opacity: tokIndex === 0 ? 0.35 : 1,
+                transition: "all 0.15s",
+              }}
+            >↑ Move Up</button>
+            <button
+              onClick={() => moveToken(tok.id, 1)}
+              disabled={tokIndex === totalTokens - 1}
+              style={{
+                flex: 1, padding: "6px", borderRadius: 8, cursor: "pointer",
+                fontFamily: "inherit", fontSize: 13,
+                background: COLORS.surface, border: `1px solid ${COLORS.border}`,
+                color: tokIndex === totalTokens - 1 ? COLORS.border : COLORS.text,
+                opacity: tokIndex === totalTokens - 1 ? 0.35 : 1,
+                transition: "all 0.15s",
+              }}
+            >↓ Move Down</button>
+          </div>
+
           <button onClick={() => removeToken(tok.id)} style={{
-            marginTop: 14, width: "100%",
+            marginTop: 8, width: "100%",
             background: COLORS.red + "22", border: `1px solid ${COLORS.red}88`,
             color: COLORS.red, borderRadius: 8, padding: "8px",
             cursor: "pointer", fontFamily: "inherit", fontSize: 13, letterSpacing: 0.5,
