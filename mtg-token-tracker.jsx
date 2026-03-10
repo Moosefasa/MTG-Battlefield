@@ -2305,46 +2305,21 @@ function TokenCard({ tok, dragIndex, isDragging, dropIndex, dragCardHeight, onDr
   const isMulti = (tok.colors || []).length > 1;
   const borderColor = allTapped ? COLORS.tap : hasEotMod ? COLORS.eot : accent;
 
-  // Push animation: cards at/below drop target shift down to make room
+  // Push animation: cards between drag origin and drop target translate to open a gap
   const isDragActive = dragCardHeight > 0;
-  const isPushed = isDragActive && dropIndex !== null && dragIndex !== null
-    && dragIndex !== dropIndex
-    && dragIndex !== null
-    && (dropIndex <= dragIndex
-        ? (dragIndex !== null && dragIndex !== dropIndex && dragIndex > dropIndex
-            ? (tok && dragIndex > dropIndex ? dragIndex > dropIndex : false)
-            : false)
-        : false);
-  // Simpler: card is pushed if drag is active AND this card's index is between dropIndex and dragIndex
-  const shouldPush = isDragActive && dragIndex !== null && dropIndex !== null && dragIndex !== dropIndex && (
-    dragIndex > dropIndex
-      ? (dragIndex >= dragIndex && dragIndex <= dragIndex) // placeholder — compute below
-      : false
-  );
-  // Clean version:
-  const pushDown = isDragActive && dragIndex !== null && dropIndex !== null && dragIndex !== dropIndex
-    ? (dropIndex < dragIndex
-        ? (dragIndex >= dropIndex && dragIndex < dragIndex ? dragCardHeight : 0) // cards between drop and drag shift down
-        : (dragIndex > dropIndex
-            ? 0
-            : 0))
-    : 0;
-  // Simplest correct version: if dragging, cards whose index is in [dropIndex, dragIndex) shift down;
-  // if dragging forward, cards in (dragIndex, dropIndex] shift up.
-  const computePush = () => {
-    if (!isDragActive || dragIndex === null || dropIndex === null || dragIndex === dropIndex) return 0;
-    const i = dragIndex;  // this card's index
-    const from = dragIndex; // being dragged
-    const to = dropIndex;   // where it's going
+  var pushY = 0;
+  if (isDragActive && activeDragIndex !== null && dropIndex !== null && activeDragIndex !== dropIndex) {
+    var from = activeDragIndex; // index of card being dragged
+    var to = dropIndex;         // current target position
+    var me = myIndex;           // this card's index
     if (from > to) {
-      // dragging up: cards between to and from-1 shift down
-      return (dragIndex >= to && dragIndex < from) ? dragCardHeight : 0;
+      // dragging upward: cards in [to, from) shift down to open gap at top
+      if (me >= to && me < from) pushY = dragCardHeight;
     } else {
-      // dragging down: cards between from+1 and to shift up
-      return (dragIndex > from && dragIndex <= to) ? -dragCardHeight : 0;
+      // dragging downward: cards in (from, to] shift up to open gap at bottom
+      if (me > from && me <= to) pushY = -dragCardHeight;
     }
-  };
-  const pushY = computePush();
+  }
 
   return (
     <div data-drag-card style={{
