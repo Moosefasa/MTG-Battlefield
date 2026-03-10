@@ -1054,6 +1054,7 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
   const [eotFlash, setEotFlash] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [layout, setLayout] = useState("list");
+  const [reorderMode, setReorderMode] = useState(false);
 
   const removeToken = (id) => setTokens(t => t.filter(tok => tok.id !== id));
   const moveToken = (id, dir) => setTokens(prev => {
@@ -1128,15 +1129,26 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
               letterSpacing: 1,
             }}>Token Tracker</h1>
           </div>
-          <button onClick={() => setLayout(l => l === "list" ? "grid" : "list")} style={{
-            background: layout === "grid" ? COLORS.gold + "22" : "#ffffff0a",
-            border: `1px solid ${layout === "grid" ? COLORS.gold + "88" : COLORS.border}`,
-            color: layout === "grid" ? COLORS.gold : COLORS.muted,
-            borderRadius: 8, padding: "5px 10px", fontSize: 13,
-            cursor: "pointer", fontFamily: "inherit",
-            boxShadow: layout === "grid" ? ("0 0 8px " + COLORS.gold + "44") : "none",
-            transition: "all 0.15s", width: 60,
-          }}>{layout === "grid" ? "⊞ Grid" : "☰ List"}</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => setLayout(l => l === "list" ? "grid" : "list")} style={{
+              background: layout === "grid" ? COLORS.gold + "22" : "#ffffff0a",
+              border: `1px solid ${layout === "grid" ? COLORS.gold + "88" : COLORS.border}`,
+              color: layout === "grid" ? COLORS.gold : COLORS.muted,
+              borderRadius: 8, padding: "5px 10px", fontSize: 13,
+              cursor: "pointer", fontFamily: "inherit",
+              boxShadow: layout === "grid" ? ("0 0 8px " + COLORS.gold + "44") : "none",
+              transition: "all 0.15s", width: 60,
+            }}>{layout === "grid" ? "⊞ Grid" : "☰ List"}</button>
+            <button onClick={() => setReorderMode(r => !r)} style={{
+              background: reorderMode ? COLORS.teal + "22" : "#ffffff0a",
+              border: `1px solid ${reorderMode ? COLORS.teal + "88" : COLORS.border}`,
+              color: reorderMode ? COLORS.teal : COLORS.muted,
+              borderRadius: 8, padding: "5px 10px", fontSize: 13,
+              cursor: "pointer", fontFamily: "inherit",
+              boxShadow: reorderMode ? ("0 0 8px " + COLORS.teal + "44") : "none",
+              transition: "all 0.15s",
+            }}>⇅</button>
+          </div>
         </div>
 
         {/* Action row */}
@@ -1216,7 +1228,7 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
         )}
 
         {layout === "list" && tokens.map((tok, i) => (
-          <TokenCard key={tok.id + "-" + i} tok={tok} tokIndex={i} totalTokens={tokens.length}
+          <TokenCard key={tok.id + "-" + i} tok={tok} tokIndex={i} totalTokens={tokens.length} reorderMode={reorderMode}
             displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
             updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
             tapOne={tapOne} untapOne={untapOne} removeToken={removeToken} moveToken={moveToken}
@@ -1230,7 +1242,7 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
             gap: 10,
           }}>
             {tokens.map((tok, i) => (
-              <TokenCardGrid key={tok.id + "-" + i} tok={tok} tokIndex={i} totalTokens={tokens.length}
+              <TokenCardGrid key={tok.id + "-" + i} tok={tok} tokIndex={i} totalTokens={tokens.length} reorderMode={reorderMode}
                 displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
                 updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
                 tapOne={tapOne} untapOne={untapOne} removeToken={removeToken} moveToken={moveToken}
@@ -1814,7 +1826,7 @@ function ManaBtn({ s, onClick }) {
 
 
 // ── Token Card Grid (portrait MTG-card style) ──────────────────────────────────
-function TokenCardGrid({ tok, tokIndex, totalTokens, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken, moveToken }) {
+function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken, moveToken }) {
   const [expanded, setExpanded] = useState(false);
   const [showCounterMenu, setShowCounterMenu] = useState(false);
 
@@ -1851,10 +1863,38 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, displayType, effectivePower
       position: "relative",
       opacity: allTapped ? 0.7 : 1,
       transition: "all 0.2s ease",
-      boxShadow: allTapped ? "none" : hasEotMod ? ("0 2px 16px " + COLORS.eot + "44") : ("0 2px 14px " + accent + "33"),
+      boxShadow: reorderMode ? ("0 0 0 2px " + COLORS.teal + "55") : allTapped ? "none" : hasEotMod ? ("0 2px 16px " + COLORS.eot + "44") : ("0 2px 14px " + accent + "33"),
       display: "flex", flexDirection: "column",
       ...cardBorderStyle,
     }}>
+
+      {/* ── Reorder mode overlay ── */}
+      {reorderMode && (
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center",
+          justifyContent: "center", gap: 8,
+          padding: "12px 10px",
+          minHeight: 90,
+        }}>
+          <div style={{ fontSize: 12, color: COLORS.text, fontWeight: "bold", textAlign: "center", lineHeight: 1.3 }}>{name}</div>
+          <div style={{ fontSize: 10, color: COLORS.muted }}>×{tok.quantity}</div>
+          <div style={{ display: "flex", gap: 6, width: "100%" }}>
+            <button onClick={() => moveToken(tok.id, -1)} disabled={tokIndex === 0} style={{
+              ...smallBtn(tokIndex === 0 ? COLORS.border : COLORS.teal),
+              flex: 1, opacity: tokIndex === 0 ? 0.3 : 1,
+              fontSize: 16, padding: "6px 4px",
+            }}>↑</button>
+            <button onClick={() => moveToken(tok.id, 1)} disabled={tokIndex === totalTokens - 1} style={{
+              ...smallBtn(tokIndex === totalTokens - 1 ? COLORS.border : COLORS.teal),
+              flex: 1, opacity: tokIndex === totalTokens - 1 ? 0.3 : 1,
+              fontSize: 16, padding: "6px 4px",
+            }}>↓</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Normal card content ── */}
+      {!reorderMode && (<>
 
       {/* ── Art section (top ~55% of card) ── */}
       <div style={{
@@ -2145,31 +2185,6 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, displayType, effectivePower
             </div>
           </Row>
 
-          {/* Reorder */}
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <button
-              onClick={() => moveToken(tok.id, -1)}
-              disabled={tokIndex === 0}
-              style={{
-                flex: 1, padding: "5px", borderRadius: 7, cursor: "pointer",
-                fontFamily: "inherit", fontSize: 11,
-                background: COLORS.surface, border: ("1px solid " + COLORS.border),
-                color: tokIndex === 0 ? COLORS.border : COLORS.text,
-                opacity: tokIndex === 0 ? 0.35 : 1, transition: "all 0.15s",
-              }}
-            >↑ Up</button>
-            <button
-              onClick={() => moveToken(tok.id, 1)}
-              disabled={tokIndex === totalTokens - 1}
-              style={{
-                flex: 1, padding: "5px", borderRadius: 7, cursor: "pointer",
-                fontFamily: "inherit", fontSize: 11,
-                background: COLORS.surface, border: ("1px solid " + COLORS.border),
-                color: tokIndex === totalTokens - 1 ? COLORS.border : COLORS.text,
-                opacity: tokIndex === totalTokens - 1 ? 0.35 : 1, transition: "all 0.15s",
-              }}
-            >↓ Down</button>
-          </div>
           <button onClick={() => removeToken(tok.id)} style={{
             marginTop: 8, width: "100%",
             background: COLORS.red + "22", border: ("1px solid " + COLORS.red + "88"),
@@ -2179,12 +2194,13 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, displayType, effectivePower
           }}>✕ Remove</button>
         </div>
       )}
+      </>)}
     </div>
   );
 }
 
 // ── Token Card ─────────────────────────────────────────────────────────────────
-function TokenCard({ tok, tokIndex, totalTokens, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken, moveToken }) {
+function TokenCard({ tok, tokIndex, totalTokens, reorderMode, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken, moveToken }) {
   const [expanded, setExpanded] = useState(false);
   const [showCounterMenu, setShowCounterMenu] = useState(false);
 
@@ -2208,22 +2224,55 @@ function TokenCard({ tok, tokIndex, totalTokens, displayType, effectivePower, ef
   return (
     <div style={{
       background: "#1a1f2e",
-      border: `1px solid ${borderColor + "44"}`,
+      border: `1px solid ${reorderMode ? COLORS.teal + "55" : borderColor + "44"}`,
       borderRadius: 10, marginBottom: 10,
       opacity: allTapped ? 0.72 : 1,
       transition: "all 0.2s ease",
       overflow: "hidden", position: "relative",
       animation: "cardSettle 0.22s ease",
-      boxShadow: hasEotMod ? `0 2px 14px ${COLORS.eot}28` : someTapped ? "none" : `0 2px 12px ${accent}22`,
+      boxShadow: reorderMode ? `0 0 0 1px ${COLORS.teal}33` : hasEotMod ? `0 2px 14px ${COLORS.eot}28` : someTapped ? "none" : `0 2px 12px ${accent}22`,
       ...(isMulti && !allTapped && !hasEotMod ? {
-        borderLeft: "3px solid transparent",
-        backgroundImage: `linear-gradient(#1a1f2e, #1a1f2e), ${gradient}`,
+        borderLeft: `3px solid ${reorderMode ? COLORS.teal : "transparent"}`,
+        backgroundImage: reorderMode ? "none" : `linear-gradient(#1a1f2e, #1a1f2e), ${gradient}`,
         backgroundOrigin: "border-box",
         backgroundClip: "padding-box, border-box",
       } : {
-        borderLeft: `3px solid ${borderColor}`,
+        borderLeft: `3px solid ${reorderMode ? COLORS.teal : borderColor}`,
       }),
     }}>
+
+      {/* ── Reorder mode ── */}
+      {reorderMode && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
+            <button onClick={() => moveToken(tok.id, -1)} disabled={tokIndex === 0} style={{
+              ...smallBtn(tokIndex === 0 ? COLORS.border : COLORS.teal),
+              opacity: tokIndex === 0 ? 0.3 : 1,
+              padding: "5px 10px", fontSize: 14, lineHeight: 1,
+            }}>↑</button>
+            <button onClick={() => moveToken(tok.id, 1)} disabled={tokIndex === totalTokens - 1} style={{
+              ...smallBtn(tokIndex === totalTokens - 1 ? COLORS.border : COLORS.teal),
+              opacity: tokIndex === totalTokens - 1 ? 0.3 : 1,
+              padding: "5px 10px", fontSize: 14, lineHeight: 1,
+            }}>↓</button>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: "bold", color: COLORS.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{displayType(tok)}</div>
+            <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+              ×{tok.quantity}{tok.isCreature ? ` · ${effectivePower(tok)}/${effectiveToughness(tok)}` : ""}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+            {(tok.colors || []).map(c => {
+              const cd = ALL_PLAYER_COLORS.find(x => x.id === c) || { hex: COLORS.artifact };
+              return <div key={c} style={{ width: 8, height: 8, borderRadius: "50%", background: cd.hex }} />;
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Normal card content ── */}
+      {!reorderMode && (<>
       {/* Art overlay — right spacer keeps dropdown clear, edge-to-edge height */}
       {tok.artUrl && (
         <div style={{
@@ -2518,34 +2567,6 @@ function TokenCard({ tok, tokIndex, totalTokens, displayType, effectivePower, ef
             </div>
           </div>
 
-          {/* Reorder */}
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button
-              onClick={() => moveToken(tok.id, -1)}
-              disabled={tokIndex === 0}
-              style={{
-                flex: 1, padding: "6px", borderRadius: 8, cursor: "pointer",
-                fontFamily: "inherit", fontSize: 13,
-                background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                color: tokIndex === 0 ? COLORS.border : COLORS.text,
-                opacity: tokIndex === 0 ? 0.35 : 1,
-                transition: "all 0.15s",
-              }}
-            >↑ Move Up</button>
-            <button
-              onClick={() => moveToken(tok.id, 1)}
-              disabled={tokIndex === totalTokens - 1}
-              style={{
-                flex: 1, padding: "6px", borderRadius: 8, cursor: "pointer",
-                fontFamily: "inherit", fontSize: 13,
-                background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                color: tokIndex === totalTokens - 1 ? COLORS.border : COLORS.text,
-                opacity: tokIndex === totalTokens - 1 ? 0.35 : 1,
-                transition: "all 0.15s",
-              }}
-            >↓ Move Down</button>
-          </div>
-
           <button onClick={() => removeToken(tok.id)} style={{
             marginTop: 8, width: "100%",
             background: COLORS.red + "22", border: `1px solid ${COLORS.red}88`,
@@ -2558,6 +2579,7 @@ function TokenCard({ tok, tokIndex, totalTokens, displayType, effectivePower, ef
           </button>
         </div>
       )}
+      </>)}
     </div>
   );
 }
