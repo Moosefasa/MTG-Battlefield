@@ -1128,20 +1128,23 @@ function useDragReorder(items, setItems) {
     const rect = containerEl.getBoundingClientRect();
 
     const ghost = document.createElement("div");
+    // Simple visual ghost — no innerHTML cloning which breaks layout
     ghost.style.cssText = [
       "position:fixed", "zIndex:9999", "pointerEvents:none",
       "width:"  + rect.width  + "px",
       "height:" + rect.height + "px",
-      "opacity:1",
-      "transform:scale(1.04) rotate(-1deg)",
       "borderRadius:10px",
-      "boxShadow:0 16px 48px rgba(0,0,0,0.85),0 0 0 2px rgba(201,168,76,0.6)",
+      "background:#1a1f2e",
+      "border:2px solid rgba(201,168,76,0.7)",
+      "boxShadow:0 16px 48px rgba(0,0,0,0.85),0 0 20px rgba(201,168,76,0.3)",
+      "transform:scale(1.04) rotate(-1deg)",
       "left:" + rect.left + "px",
       "top:"  + rect.top  + "px",
-      "background:#1a1f2e",
+      "display:flex", "alignItems:center", "justifyContent:center",
       "overflow:hidden",
     ].join(";");
-    ghost.innerHTML = containerEl.innerHTML;
+    // Inner label so you can see what you're dragging
+    ghost.innerHTML = '<div style="color:#c9a84c;font-size:13px;font-weight:bold;opacity:0.7;pointer-events:none;">⠿ moving</div>';
     document.body.appendChild(ghost);
 
     ds.current = {
