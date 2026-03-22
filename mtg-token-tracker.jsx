@@ -206,9 +206,6 @@ styleTag.textContent = `
   @keyframes formSlideDown  { from{transform:translateY(0)} to{transform:translateY(100%)} }
   @keyframes cardSettle     { from{transform:translateY(-18px);opacity:0.4} to{transform:translateY(0);opacity:1} }
   @keyframes cardSettleDown { from{transform:translateY(18px);opacity:0.4}  to{transform:translateY(0);opacity:1} }
-  .grid-slider { -webkit-appearance:none; appearance:none; height:3px; border-radius:2px; outline:none; cursor:pointer; background: linear-gradient(to right, #c9a84c 0%, #c9a84c var(--pct), #2a3050 var(--pct), #2a3050 100%); }
-  .grid-slider::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#c9a84c; box-shadow:0 0 8px #c9a84c88; border:2px solid #0a0c10; cursor:pointer; }
-  .grid-slider::-moz-range-thumb { width:16px; height:16px; border-radius:50%; background:#c9a84c; box-shadow:0 0 8px #c9a84c88; border:2px solid #0a0c10; cursor:pointer; }
 `;
 if (!document.head.querySelector("#bf-styles")) {
   styleTag.id = "bf-styles";
@@ -289,7 +286,6 @@ function App() {
         <div ref={ttScrollRef} data-scroll="tt" style={{
           position:"fixed", inset:0, zIndex:50,
           overflowY:"auto", WebkitOverflowScrolling:"touch",
-          background: COLORS.bg,
           animation: animDir === "down"
             ? "slideDown 0.34s cubic-bezier(0.4,0,0.2,1) forwards"
             : "slideUp 0.34s cubic-bezier(0.4,0,0.2,1) forwards",
@@ -1160,7 +1156,7 @@ function DiceModal({ onClose, closing }) {
   return (
     <div onClick={onClose} style={{
       position:"fixed", inset:0, zIndex:100,
-      background:"rgba(0,0,0,0.6)",
+      background:"rgba(0,0,0,0.6)", backdropFilter:"blur(4px)",
       display:"flex", alignItems:"flex-end", justifyContent:"center",
       animation:"fadeIn 0.2s ease",
     }}>
@@ -1407,15 +1403,23 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
             display: "flex", alignItems: "center", gap: 10,
             padding: "6px 4px 2px", marginTop: 4,
           }}>
-            <span style={{ fontSize: 9, color: COLORS.muted, flexShrink: 0 }}>⊞</span>
-            <input
-              type="range" min={1} max={3} step={1}
-              value={gridCols}
-              onChange={e => setGridCols(Number(e.target.value))}
-              className="grid-slider"
-              style={{ flex: 1, "--pct": `${(gridCols - 1) / 2 * 100}%` }}
-            />
-            <span style={{ fontSize: 10, color: COLORS.gold, letterSpacing: 0.5, minWidth: 40, textAlign: "right", flexShrink: 0 }}>
+            <span style={{ fontSize: 10, color: COLORS.muted, letterSpacing: 0.5, flexShrink: 0 }}>⊞</span>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+              {[1, 2, 3].map(n => (
+                <button key={n} onClick={() => setGridCols(n)} style={{
+                  flex: 1, padding: "4px 0", borderRadius: 6, fontSize: 11,
+                  cursor: "pointer", fontFamily: "inherit",
+                  background: gridCols === n ? COLORS.gold + "28" : "#ffffff08",
+                  border: `1px solid ${gridCols === n ? COLORS.gold + "99" : COLORS.border}`,
+                  color: gridCols === n ? COLORS.gold : COLORS.muted,
+                  boxShadow: gridCols === n ? `0 0 7px ${COLORS.gold}44` : "none",
+                  transition: "all 0.15s",
+                }}>
+                  {n === 1 ? "▬" : n === 2 ? "▬▬" : "▬▬▬"}
+                </button>
+              ))}
+            </div>
+            <span style={{ fontSize: 10, color: COLORS.muted, letterSpacing: 0.5, minWidth: 28, textAlign: "right" }}>
               {gridCols === 1 ? "Large" : gridCols === 2 ? "Medium" : "Small"}
             </span>
           </div>
@@ -2134,7 +2138,7 @@ function GridCardSheet({ tok, onClose, displayType, effectivePower, effectiveTou
   return (
     <div onClick={close} style={{
       position: "fixed", inset: 0, zIndex: 110,
-      background: "rgba(0,0,0,0.65)",
+      background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
       <div onClick={e => e.stopPropagation()} style={{
