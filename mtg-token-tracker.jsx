@@ -206,6 +206,9 @@ styleTag.textContent = `
   @keyframes formSlideDown  { from{transform:translateY(0)} to{transform:translateY(100%)} }
   @keyframes cardSettle     { from{transform:translateY(-18px);opacity:0.4} to{transform:translateY(0);opacity:1} }
   @keyframes cardSettleDown { from{transform:translateY(18px);opacity:0.4}  to{transform:translateY(0);opacity:1} }
+  .grid-slider { -webkit-appearance:none; appearance:none; height:3px; border-radius:2px; outline:none; cursor:pointer; background: linear-gradient(to right, #c9a84c 0%, #c9a84c var(--pct), #2a3050 var(--pct), #2a3050 100%); }
+  .grid-slider::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#c9a84c; box-shadow:0 0 8px #c9a84c88; border:2px solid #0a0c10; cursor:pointer; }
+  .grid-slider::-moz-range-thumb { width:16px; height:16px; border-radius:50%; background:#c9a84c; box-shadow:0 0 8px #c9a84c88; border:2px solid #0a0c10; cursor:pointer; }
 `;
 if (!document.head.querySelector("#bf-styles")) {
   styleTag.id = "bf-styles";
@@ -216,6 +219,9 @@ function App() {
   const [screen, setScreen]     = useState("hub");
   const [animDir, setAnimDir]   = useState(null);
   const [diceState, setDiceState] = useState("closed");
+  const [rulingsOpen, setRulingsOpen] = useState(false);
+  const [rulingsClosing, setRulingsClosing] = useState(false);
+  const playersRef = useRef([]);
 
   // Token form state lifted here so FAB + sheet render outside the scroll container
   const [showAdd, setShowAdd]       = useState(false);
@@ -231,6 +237,12 @@ function App() {
   const goBack = () => {
     setAnimDir("down");
     setTimeout(() => { setScreen("hub"); setAnimDir(null); }, 340);
+  };
+
+  const openRulings  = () => { setRulingsOpen(true); setRulingsClosing(false); };
+  const closeRulings = () => {
+    setRulingsClosing(true);
+    setTimeout(() => { setRulingsOpen(false); setRulingsClosing(false); }, 320);
   };
 
   const openDice  = () => setDiceState("open");
@@ -271,7 +283,7 @@ function App() {
 
   return (
     <div style={{ position:"relative", minHeight:"100vh", background:COLORS.bg }}>
-      <HubScreen onNav={goTo} onDice={openDice} />
+      <HubScreen onNav={goTo} onDice={openDice} onRulings={openRulings} playersRef={playersRef} />
 
       {(onScreen || animDir) && (
         <div ref={ttScrollRef} data-scroll="tt" style={{
@@ -303,7 +315,7 @@ function App() {
       {onScreen && showAdd && draft && (
         <div onClick={closeForm} style={{
           position: "fixed", inset: 0, zIndex: 60,
-          background: "rgba(0,0,0,0.72)", backdropFilter: "blur(4px)",
+          background: "rgba(0,0,0,0.72)",
           display: "flex", alignItems: "flex-end", justifyContent: "center",
           animation: "fadeIn 0.2s ease",
         }}>
@@ -352,6 +364,14 @@ function App() {
       {diceState !== "closed" && (
         <DiceModal closing={diceState === "closing"} onClose={closeDice} />
       )}
+      {rulingsOpen && (
+        <RulingsSheet
+          closing={rulingsClosing}
+          onClose={closeRulings}
+          tokens={tokens}
+          playersRef={playersRef}
+        />
+      )}
     </div>
   );
 }
@@ -391,7 +411,7 @@ const ALL_PLAYER_COLORS = [
 const DEFAULT_COLOR_IDS = ["b1","r1","g1","p1"];
 let nextPlayerId = 5;
 
-function HubScreen({ onNav, onDice }) {
+function HubScreen({ onNav, onDice, onRulings, playersRef }) {
   const [players, setPlayers] = useState(() => [
     { id:1, name:"Player 1", colorId:"b1", life:40, poison:0, energy:0, exp:0, rad:0, cmdDamage:{}, commanders:[] },
     { id:2, name:"Player 2", colorId:"r1", life:40, poison:0, energy:0, exp:0, rad:0, cmdDamage:{}, commanders:[] },
@@ -402,6 +422,9 @@ function HubScreen({ onNav, onDice }) {
   const [editingName, setEditingName] = useState(null);
   const [tempName, setTempName]       = useState("");
   const [showNewGame, setShowNewGame] = useState(false);
+
+  // Keep App-level ref in sync for rulings context
+  if (playersRef) playersRef.current = players.slice(0, playerCount);
 
   const activePlayers = players.slice(0, playerCount);
   const isSolo = playerCount === 1;
@@ -518,6 +541,7 @@ function HubScreen({ onNav, onDice }) {
       }}>
         <ToolButton icon="⬡" label="Token Tracker" onClick={() => onNav("tokens")} accent={COLORS.gold} />
         <ToolButton icon="🎲" label="Dice / Coin"   onClick={onDice}                accent={COLORS.teal} />
+        <ToolButton icon="⚖" label="Ask the Rules" onClick={onRulings}             accent={COLORS.eot} />
       </div>
     </div>
   );
@@ -880,6 +904,229 @@ const DICE = [
   { label:"d20", sides:20, icon:"⬡", color:"#c9a84c" },
 ];
 
+// ── Rulings Sheet ──────────────────────────────────────────────────────────────
+function RulingsSheet({ onClose, closing, tokens, playersRef }) {
+  const [messages, setMessages] = useState([]); // [{role, text}]
+  const [input, setInput]       = useState("");
+  const [loading, setLoading]   = useState(false);
+  const scrollRef = useRef(null);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, 40);
+  };
+
+  // Build battlefield context string from live state
+  const buildContext = () => {
+    const players = playersRef ? playersRef.current : [];
+    let ctx = "";
+
+    if (players.length > 0) {
+      ctx += "=== PLAYERS ===\n";
+      players.forEach(p => {
+        ctx += `${p.name}: ${p.life} life`;
+        if (p.poison > 0)  ctx += `, ${p.poison} poison`;
+        if (p.energy > 0)  ctx += `, ${p.energy} energy`;
+        const cmdEntries = Object.entries(p.cmdDamage || {}).filter(([,v]) => v > 0);
+        if (cmdEntries.length > 0) ctx += `, cmd dmg received: ${cmdEntries.map(([k,v]) => `${v} from player ${k}`).join(", ")}`;
+        ctx += "\n";
+      });
+    }
+
+    if (tokens.length > 0) {
+      ctx += "\n=== BATTLEFIELD TOKENS ===\n";
+      tokens.forEach(tok => {
+        const name = tok.type === "Custom…" ? (tok.customType || "Custom") : tok.type;
+        let line = `${tok.quantity}x ${name}`;
+        if (tok.isCreature || tok.category === "creature") {
+          const pow = tok.basePower + tok.powerMod + tok.eotPowerMod;
+          const tou = tok.baseToughness + tok.toughnessMod + tok.eotToughnessMod;
+          line += ` (${pow}/${tou})`;
+        }
+        if (tok.tappedCount > 0) line += ` [${tok.tappedCount} tapped]`;
+        if (tok.keywords && tok.keywords.length > 0) line += ` — ${tok.keywords.join(", ")}`;
+        if (tok.counters && tok.counters.length > 0) line += ` — counters: ${tok.counters.map(c => `${c.type}×${c.count}`).join(", ")}`;
+        if (tok.abilityText) line += `\n  Abilities: ${tok.abilityText}`;
+        ctx += line + "\n";
+      });
+    }
+
+    return ctx.trim();
+  };
+
+  const send = () => {
+    const q = input.trim();
+    if (!q || loading) return;
+    setInput("");
+
+    const userMsg = { role: "user", text: q };
+    setMessages(prev => [...prev, userMsg]);
+    setLoading(true);
+    scrollToBottom();
+
+    const context = buildContext();
+    const systemPrompt = `You are an expert Magic: The Gathering rules advisor with deep knowledge of the Comprehensive Rules, card interactions, priority, the stack, and judge rulings. Answer questions clearly and concisely. Cite specific rules numbers when relevant. If a ruling is complex or edge-case, acknowledge uncertainty and recommend consulting a judge.
+
+${context ? `The player is currently in a game with this battlefield state:\n${context}\n\nUse this context to give more relevant rulings advice when applicable.` : "No active battlefield state provided."}
+
+Always end your response with a brief disclaimer if the ruling is non-obvious.`;
+
+    // Build message history for multi-turn context (last 6 exchanges)
+    const history = [];
+    const recent = messages.slice(-6);
+    recent.forEach(m => history.push({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
+    history.push({ role: "user", content: q });
+
+    fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: history,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("") || "Sorry, I couldn't get a response. Please try again.";
+        setMessages(prev => [...prev, { role: "assistant", text }]);
+        setLoading(false);
+        scrollToBottom();
+      })
+      .catch(() => {
+        setMessages(prev => [...prev, { role: "assistant", text: "Connection error — please check your network and try again." }]);
+        setLoading(false);
+        scrollToBottom();
+      });
+  };
+
+  const handleKey = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(0,0,0,0.65)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      animation: "fadeIn 0.2s ease",
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 520,
+        background: COLORS.surface,
+        borderRadius: "20px 20px 0 0",
+        border: `1px solid ${COLORS.border}`, borderBottom: "none",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.7)",
+        height: "78vh",
+        display: "flex", flexDirection: "column",
+        animation: closing
+          ? "modalSlideDown 0.32s cubic-bezier(0.4,0,0.2,1) forwards"
+          : "modalSlideUp 0.32s cubic-bezier(0.4,0,0.2,1) forwards",
+      }}>
+        {/* Drag pill */}
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: COLORS.border, margin: "14px auto 6px", flexShrink: 0 }} />
+
+        {/* Header */}
+        <div style={{
+          padding: "6px 16px 12px", borderBottom: `1px solid ${COLORS.border}`,
+          display: "flex", alignItems: "center", flexShrink: 0,
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, letterSpacing: 3, color: COLORS.eot, textTransform: "uppercase" }}>⚖ MTG Rules Advisor</div>
+            <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>
+              {tokens.length > 0 || (playersRef && playersRef.current.length > 0)
+                ? `Battlefield context active · ${tokens.length} token type${tokens.length !== 1 ? "s" : ""}`
+                : "Ask any rules question"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: "#ffffff0a", border: `1px solid ${COLORS.border}`,
+            color: COLORS.muted, borderRadius: 8, padding: "5px 10px",
+            fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+          }}>✕</button>
+        </div>
+
+        {/* Message history */}
+        <div ref={scrollRef} style={{
+          flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch",
+          padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10,
+        }}>
+          {messages.length === 0 && (
+            <div style={{ textAlign: "center", padding: "30px 20px", color: COLORS.muted }}>
+              <div style={{ fontSize: 32, marginBottom: 10, opacity: 0.4 }}>⚖</div>
+              <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+                Ask about card interactions, priority,<br/>the stack, triggered abilities, and more.
+              </div>
+              <div style={{ fontSize: 11, marginTop: 12, color: COLORS.border, lineHeight: 1.6 }}>
+                Your current battlefield state is included<br/>automatically for context.
+              </div>
+            </div>
+          )}
+
+          {messages.map((m, i) => (
+            <div key={i} style={{
+              display: "flex",
+              justifyContent: m.role === "user" ? "flex-end" : "flex-start",
+            }}>
+              <div style={{
+                maxWidth: "88%",
+                padding: "9px 13px",
+                borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                background: m.role === "user" ? COLORS.eot + "28" : "#ffffff0d",
+                border: `1px solid ${m.role === "user" ? COLORS.eot + "55" : COLORS.border}`,
+                fontSize: 13, lineHeight: 1.6, color: COLORS.text,
+                whiteSpace: "pre-wrap",
+              }}>
+                {m.text}
+              </div>
+            </div>
+          ))}
+
+          {loading && (
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div style={{
+                padding: "10px 16px", borderRadius: "14px 14px 14px 4px",
+                background: "#ffffff0d", border: `1px solid ${COLORS.border}`,
+                color: COLORS.muted, fontSize: 13,
+              }}>
+                <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span> Consulting the rules…
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input row */}
+        <div style={{
+          padding: "10px 12px 28px", borderTop: `1px solid ${COLORS.border}`,
+          display: "flex", gap: 8, flexShrink: 0,
+          background: COLORS.surface,
+        }}>
+          <textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKey}
+            placeholder="Ask a rules question…"
+            rows={2}
+            style={{
+              flex: 1, background: "#ffffff0a",
+              border: `1px solid ${COLORS.border}`, borderRadius: 10,
+              color: COLORS.text, fontFamily: "inherit", fontSize: 13,
+              padding: "8px 10px", resize: "none",
+              outline: "none", lineHeight: 1.5,
+            }}
+          />
+          <button onClick={send} disabled={!input.trim() || loading} style={{
+            ...smallBtn(COLORS.eot),
+            padding: "0 16px", fontSize: 18, alignSelf: "stretch",
+            opacity: !input.trim() || loading ? 0.4 : 1,
+            borderRadius: 10,
+          }}>↑</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DiceModal({ onClose, closing }) {
   const [rolling, setRolling] = useState(null);
   const [phase, setPhase]     = useState("idle"); // "idle"|"rolling"|"result"
@@ -1056,6 +1303,7 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
   const [layout, setLayout] = useState("list");
   const [reorderMode, setReorderMode] = useState(false);
   const [gridSheet, setGridSheet] = useState(null);
+  const [gridCols, setGridCols] = useState(2); // 1, 2, or 3
 
   const removeToken = (id) => setTokens(t => t.filter(tok => tok.id !== id));
   const moveToken = (id, dir) => setTokens(prev => {
@@ -1152,6 +1400,26 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
           </div>
         </div>
 
+        {/* Grid size slider — only in grid mode */}
+        {layout === "grid" && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "6px 4px 2px", marginTop: 4,
+          }}>
+            <span style={{ fontSize: 9, color: COLORS.muted, flexShrink: 0 }}>⊞</span>
+            <input
+              type="range" min={1} max={3} step={1}
+              value={gridCols}
+              onChange={e => setGridCols(Number(e.target.value))}
+              className="grid-slider"
+              style={{ flex: 1, "--pct": `${(gridCols - 1) / 2 * 100}%` }}
+            />
+            <span style={{ fontSize: 10, color: COLORS.gold, letterSpacing: 0.5, minWidth: 40, textAlign: "right", flexShrink: 0 }}>
+              {gridCols === 1 ? "Large" : gridCols === 2 ? "Medium" : "Small"}
+            </span>
+          </div>
+        )}
+
         {/* Action row */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
           <button onClick={endOfTurn} style={{
@@ -1239,11 +1507,12 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
         {layout === "grid" && (
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
-            gap: 10,
+            gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
+            gap: gridCols === 3 ? 7 : 10,
           }}>
             {tokens.map((tok, i) => (
               <TokenCardGrid key={tok.id + "-" + i} tok={tok} tokIndex={i} totalTokens={tokens.length} reorderMode={reorderMode}
+                gridCols={gridCols} onOpenSheet={() => setGridSheet(tok.id)}
                 displayType={displayType} effectivePower={effectivePower} effectiveToughness={effectiveToughness}
                 updateToken={updateToken} addCounter={addCounter} removeCounter={removeCounter}
                 tapOne={tapOne} untapOne={untapOne} removeToken={removeToken} moveToken={moveToken}
@@ -2057,8 +2326,16 @@ function GridCardSheet({ tok, onClose, displayType, effectivePower, effectiveTou
   );
 }
 
-function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken, moveToken }) {
+function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, gridCols, onOpenSheet, displayType, effectivePower, effectiveToughness, updateToken, addCounter, removeCounter, tapOne, untapOne, removeToken, moveToken }) {
   const [showCounterMenu, setShowCounterMenu] = useState(false);
+
+  // Scale everything based on column count
+  const artPct   = gridCols === 1 ? "55%" : gridCols === 2 ? "62%" : "52%";
+  const nameFz   = gridCols === 1 ? 15    : gridCols === 2 ? 13    : 11;
+  const badgeFz  = gridCols === 1 ? 10    : gridCols === 2 ? 9     : 8;
+  const bodyPad  = gridCols === 1 ? "9px 12px 10px" : "7px 10px 8px";
+  const ptFz     = gridCols === 1 ? 15    : gridCols === 2 ? 13    : 11;
+  const tapBtnSz = gridCols === 3 ? 20    : 26;
 
   const name = displayType(tok);
   const isArtifactToken = ARTIFACT_TOKENS.includes(tok.type);
@@ -2130,7 +2407,7 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, d
       <div style={{
         position: "relative",
         width: "100%",
-        paddingTop: "62%", // portrait ratio art window
+        paddingTop: artPct,
         overflow: "hidden",
         background: COLORS.card,
         flexShrink: 0,
@@ -2193,21 +2470,21 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, d
           display: "flex", flexDirection: "column", gap: 3,
         }}>
           <button onClick={() => tapOne(tok.id)} disabled={tapped >= tok.quantity} style={{
-            width: 26, height: 24, borderRadius: "5px 5px 2px 2px",
+            width: tapBtnSz, height: tapBtnSz - 2, borderRadius: "5px 5px 2px 2px",
             background: "rgba(0,0,0,0.65)",
             border: ("1px solid " + (tapped < tok.quantity ? accent + "99" : COLORS.border + "66")),
             color: tapped < tok.quantity ? accent : COLORS.muted,
-            fontSize: 12, cursor: tapped < tok.quantity ? "pointer" : "default",
+            fontSize: gridCols === 3 ? 10 : 12, cursor: tapped < tok.quantity ? "pointer" : "default",
             display: "flex", alignItems: "center", justifyContent: "center",
             boxShadow: tapped < tok.quantity ? ("0 0 7px " + accent + "77") : "none",
             transition: "all 0.15s",
           }}>↷</button>
           <button onClick={() => untapOne(tok.id)} disabled={tapped === 0} style={{
-            width: 26, height: 24, borderRadius: "2px 2px 5px 5px",
+            width: tapBtnSz, height: tapBtnSz - 2, borderRadius: "2px 2px 5px 5px",
             background: "rgba(0,0,0,0.65)",
             border: ("1px solid " + (tapped > 0 ? accent + "99" : COLORS.border + "66")),
             color: tapped > 0 ? accent : COLORS.muted,
-            fontSize: 12, cursor: tapped > 0 ? "pointer" : "default",
+            fontSize: gridCols === 3 ? 10 : 12, cursor: tapped > 0 ? "pointer" : "default",
             display: "flex", alignItems: "center", justifyContent: "center",
             boxShadow: tapped > 0 ? ("0 0 7px " + accent + "77") : "none",
             transition: "all 0.15s",
@@ -2221,7 +2498,7 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, d
             background: "rgba(0,0,0,0.75)",
             border: ("1px solid " + (hasEotMod ? COLORS.eot : accent) + "88"),
             borderRadius: 6, padding: "2px 7px",
-            fontSize: 13, fontWeight: "bold",
+            fontSize: ptFz, fontWeight: "bold",
             color: hasEotMod ? COLORS.eot : accent,
             boxShadow: "0 0 8px " + (hasEotMod ? COLORS.eot : accent) + "66",
             letterSpacing: 0.5,
@@ -2233,7 +2510,7 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, d
 
       {/* ── Card body (bottom ~45%) ── */}
       <div style={{
-        padding: "7px 10px 8px",
+        padding: bodyPad,
         display: "flex", flexDirection: "column", gap: 4,
         flex: 1,
         background: "#1a1f2e",
@@ -2242,7 +2519,7 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, d
         {/* Name + color pips row */}
         <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
           <span style={{
-            fontSize: 13, fontWeight: "bold", color: COLORS.text,
+            fontSize: nameFz, fontWeight: "bold", color: COLORS.text,
             flex: 1, minWidth: 0, overflow: "hidden",
             textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>{name}</span>
@@ -2251,7 +2528,7 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, d
               {tok.colors.map(id => {
                 const mc = MTG_COLORS.find(c => c.id === id);
                 return <div key={id} style={{
-                  width: 8, height: 8, borderRadius: "50%",
+                  width: gridCols === 3 ? 6 : 8, height: gridCols === 3 ? 6 : 8, borderRadius: "50%",
                   background: mc?.hex || "#888", border: "1px solid #ffffff33",
                   boxShadow: "0 0 4px " + (mc?.hex || "#888") + "88",
                 }} />;
@@ -2264,27 +2541,27 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, d
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           {isArtifactToken && (
             <span style={{
-              fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase",
+              fontSize: badgeFz, letterSpacing: 0.8, textTransform: "uppercase",
               color: COLORS.artifact, background: COLORS.artifact + "22",
               padding: "1px 5px", borderRadius: 3,
             }}>{tok.isCreature ? "Art. Creature" : "Artifact"}</span>
           )}
           {hasEotMod && (
             <span style={{
-              fontSize: 9, color: COLORS.eot, background: COLORS.eot + "22",
+              fontSize: badgeFz, color: COLORS.eot, background: COLORS.eot + "22",
               padding: "1px 5px", borderRadius: 3,
             }}>until EOT</span>
           )}
-          {tok.keywords && tok.keywords.slice(0, 3).map(kw => (
+          {tok.keywords && tok.keywords.slice(0, gridCols === 1 ? 5 : 3).map(kw => (
             <span key={kw} style={{
-              fontSize: 9, padding: "1px 5px", borderRadius: 8,
+              fontSize: badgeFz, padding: "1px 5px", borderRadius: 8,
               background: accent + "22", border: ("1px solid " + accent + "44"),
               color: accent,
             }}>{kw}</span>
           ))}
           {tok.counters.map(c => (
             <span key={c.type} style={{
-              fontSize: 9,
+              fontSize: badgeFz,
               color: c.type === "+1/+1" ? COLORS.teal : c.type === "-1/-1" ? COLORS.red : COLORS.gold,
               background: "#ffffff11", padding: "1px 5px", borderRadius: 3,
             }}>{c.type}×{c.count}</span>
@@ -2294,9 +2571,9 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, d
         {/* Ability text snippet */}
         {tok.abilityText && (
           <div style={{
-            fontSize: 9, color: COLORS.muted, fontStyle: "italic",
+            fontSize: badgeFz, color: COLORS.muted, fontStyle: "italic",
             lineHeight: 1.4, overflow: "hidden",
-            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+            display: "-webkit-box", WebkitLineClamp: gridCols === 1 ? 3 : 2, WebkitBoxOrient: "vertical",
           }}>
             {tok.abilityText}
           </div>
@@ -2306,7 +2583,8 @@ function TokenCardGrid({ tok, tokIndex, totalTokens, reorderMode, onOpenSheet, d
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
           <button onClick={onOpenSheet} style={{
             background: accent + "18", border: ("1px solid " + accent + "66"),
-            color: accent, fontSize: 10, cursor: "pointer", padding: "3px 8px",
+            color: accent, fontSize: gridCols === 3 ? 9 : 10, cursor: "pointer",
+            padding: gridCols === 3 ? "2px 6px" : "3px 8px",
             borderRadius: 6, flexShrink: 0, letterSpacing: 0.5,
             boxShadow: "0 0 6px " + accent + "44",
             transition: "box-shadow 0.15s",
