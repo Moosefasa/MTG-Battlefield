@@ -289,6 +289,7 @@ function App() {
         <div ref={ttScrollRef} data-scroll="tt" style={{
           position:"fixed", inset:0, zIndex:50,
           overflowY:"auto", WebkitOverflowScrolling:"touch",
+          background: COLORS.bg,
           animation: animDir === "down"
             ? "slideDown 0.34s cubic-bezier(0.4,0,0.2,1) forwards"
             : "slideUp 0.34s cubic-bezier(0.4,0,0.2,1) forwards",
@@ -1159,7 +1160,7 @@ function DiceModal({ onClose, closing }) {
   return (
     <div onClick={onClose} style={{
       position:"fixed", inset:0, zIndex:100,
-      background:"rgba(0,0,0,0.6)", backdropFilter:"blur(4px)",
+      background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center",
       animation:"fadeIn 0.2s ease",
     }}>
@@ -2133,7 +2134,7 @@ function GridCardSheet({ tok, onClose, displayType, effectivePower, effectiveTou
   return (
     <div onClick={close} style={{
       position: "fixed", inset: 0, zIndex: 110,
-      background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
+      background: "rgba(0,0,0,0.65)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }}>
       <div onClick={e => e.stopPropagation()} style={{
