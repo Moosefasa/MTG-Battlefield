@@ -41,6 +41,80 @@
   <!-- Babel standalone to transpile JSX in-browser -->
   <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
 
+  <!-- Apply saved font + theme before app renders to avoid flash -->
+  <script>
+    (function() {
+      var font = localStorage.getItem('bf-font');
+      if (font) document.documentElement.style.setProperty('--app-font', font);
+    })();
+  </script>
+
+  <!-- The app -->
+  <script type="text/babel" data-presets="react" src="mtg-token-tracker.jsx"></script>
+
+  <script>
+    function mount() {
+      if (window.__MTGApp) {
+        try {
+          const root = ReactDOM.createRoot(document.getElementById('root'));
+          root.render(React.createElement(window.__MTGApp));
+        } catch(e) {
+          document.getElementById('root').innerHTML =
+            '<div style="color:#c94c4c;padding:24px;font-family:monospace;font-size:13px;background:#0a0c10;min-height:100vh">' +
+            '<div style="color:#c9a84c;font-size:16px;margin-bottom:12px">⚠ Render Error</div>' +
+            '<pre style="white-space:pre-wrap">' + e.message + '</pre></div>';
+        }
+      } else {
+        setTimeout(mount, 50);
+      }
+    }
+    window.addEventListener('load', () => setTimeout(mount, 200));
+  </script>
+
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0c10" />
+  <meta name="description" content="MTG Battlefield — life tracker, token tracker, dice roller" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Battlefield" />
+
+  <title>MTG Battlefield</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=MedievalSharp&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=IM+Fell+English:ital@0;1&family=Uncial+Antiqua&family=Lato:wght@300;400;700&display=swap" rel="stylesheet" />
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root {
+      height: 100%;
+      background: #0a0c10;
+      font-family: var(--app-font, 'MedievalSharp', serif);
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    body { overflow-x: hidden; }
+    button { touch-action: manipulation; font-family: inherit; }
+    input, textarea, select { font-family: inherit; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React + ReactDOM (production builds) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel standalone to transpile JSX in-browser -->
+  <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+
   <!-- Apply saved font before app renders to avoid flash -->
   <script>
     (function() {
