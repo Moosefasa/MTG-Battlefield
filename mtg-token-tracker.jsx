@@ -212,6 +212,15 @@ if (!document.head.querySelector("#bf-styles")) {
   document.head.appendChild(styleTag);
 }
 
+const FONTS = [
+  { id: "MedievalSharp",  label: "MedievalSharp",  stack: "'MedievalSharp', serif" },
+  { id: "Cinzel",         label: "Cinzel",          stack: "'Cinzel', serif" },
+  { id: "Crimson Text",   label: "Crimson Text",    stack: "'Crimson Text', serif" },
+  { id: "IM Fell English",label: "IM Fell",         stack: "'IM Fell English', serif" },
+  { id: "Uncial Antiqua", label: "Uncial Antiqua",  stack: "'Uncial Antiqua', cursive" },
+  { id: "Lato",           label: "Lato",            stack: "'Lato', sans-serif" },
+];
+
 function App() {
   const [screen, setScreen]     = useState("hub");
   const [animDir, setAnimDir]   = useState(null);
@@ -219,6 +228,14 @@ function App() {
   const [rulingsOpen, setRulingsOpen] = useState(false);
   const [rulingsClosing, setRulingsClosing] = useState(false);
   const playersRef = useRef([]);
+  const [activeFont, setActiveFont] = useState(() => {
+    return localStorage.getItem('bf-font') || "'MedievalSharp', serif";
+  });
+  const applyFont = (stack) => {
+    setActiveFont(stack);
+    localStorage.setItem('bf-font', stack);
+    document.documentElement.style.setProperty('--app-font', stack);
+  };
 
   // Token form state lifted here so FAB + sheet render outside the scroll container
   const [showAdd, setShowAdd]       = useState(false);
@@ -280,7 +297,7 @@ function App() {
 
   return (
     <div style={{ position:"relative", minHeight:"100vh", background:COLORS.bg }}>
-      <HubScreen onNav={goTo} onDice={openDice} onRulings={openRulings} playersRef={playersRef} />
+      <HubScreen onNav={goTo} onDice={openDice} onRulings={openRulings} playersRef={playersRef} activeFont={activeFont} onFontChange={applyFont} />
 
       {(onScreen || animDir) && (
         <div ref={ttScrollRef} data-scroll="tt" style={{
@@ -405,7 +422,7 @@ const ALL_PLAYER_COLORS = [
 const DEFAULT_COLOR_IDS = ["b1","r1","g1","p1"];
 let nextPlayerId = 5;
 
-function HubScreen({ onNav, onDice, onRulings, playersRef }) {
+function HubScreen({ onNav, onDice, onRulings, playersRef, activeFont, onFontChange }) {
   const [players, setPlayers] = useState(() => [
     { id:1, name:"Player 1", colorId:"b1", life:40, poison:0, energy:0, exp:0, rad:0, cmdDamage:{}, commanders:[] },
     { id:2, name:"Player 2", colorId:"r1", life:40, poison:0, energy:0, exp:0, rad:0, cmdDamage:{}, commanders:[] },
@@ -446,7 +463,7 @@ function HubScreen({ onNav, onDice, onRulings, playersRef }) {
   };
 
   return (
-    <div style={{ minHeight:"100vh", background:COLORS.bg, fontFamily:"'Georgia','Times New Roman',serif", color:COLORS.text }}>
+    <div style={{ minHeight:"100vh", background:COLORS.bg, fontFamily:"inherit", color:COLORS.text }}>
 
       {/* Header */}
       <div style={{
@@ -473,6 +490,23 @@ function HubScreen({ onNav, onDice, onRulings, playersRef }) {
               cursor:"pointer", fontFamily:"inherit", letterSpacing:0.5, fontSize:13,
             }}>{n===1 ? "Solo" : `${n}P`}</button>
           ))}
+        </div>
+
+        {/* Font picker */}
+        <div style={{ display:"flex", justifyContent:"center", gap:5, marginTop:8, flexWrap:"wrap" }}>
+          {FONTS.map(f => {
+            const isActive = activeFont === f.stack;
+            return (
+              <button key={f.id} onClick={() => onFontChange(f.stack)} style={{
+                padding:"3px 10px", borderRadius:12, fontSize:11,
+                background: isActive ? COLORS.border+"88" : "#ffffff06",
+                border:`1px solid ${isActive ? COLORS.muted : COLORS.border+"66"}`,
+                color: isActive ? COLORS.text : COLORS.muted,
+                cursor:"pointer", fontFamily:f.stack,
+                transition:"all 0.15s",
+              }}>{f.label}</button>
+            );
+          })}
         </div>
       </div>
 
@@ -535,7 +569,7 @@ function HubScreen({ onNav, onDice, onRulings, playersRef }) {
       }}>
         <ToolButton icon="⬡" label="Token Tracker" onClick={() => onNav("tokens")} accent={COLORS.gold} />
         <ToolButton icon="🎲" label="Dice / Coin"   onClick={onDice}                accent={COLORS.teal} />
-        <ToolButton icon="🃏" label="Card Lookup"   onClick={onRulings}             accent={COLORS.eot} />
+        <ToolButton icon="🃏" label="Oracle"        onClick={onRulings}             accent={COLORS.eot} />
       </div>
     </div>
   );
@@ -898,7 +932,7 @@ const DICE = [
   { label:"d20", sides:20, icon:"⬡", color:"#c9a84c" },
 ];
 
-// ── Card Lookup Sheet ──────────────────────────────────────────────────────────
+// ── Oracle — Card Lookup Sheet ────────────────────────────────────────────────
 function RulingsSheet({ onClose, closing }) {
   const [query, setQuery]         = useState("");
   const [suggestions, setSugs]    = useState([]);
@@ -1440,7 +1474,7 @@ function TokenTrackerScreen({ onBack, tokens, setTokens }) {
     <div style={{
       minHeight: "100vh",
       background: COLORS.bg,
-      fontFamily: "'Georgia', 'Times New Roman', serif",
+      fontFamily: "inherit",
       color: COLORS.text,
       padding: "0 0 120px 0",
     }}>
@@ -2122,7 +2156,7 @@ function AddTokenForm({ draft, setDraft, onAdd, onCancel, hideHeader=false }) {
                 onChange={e => setDraft(d => ({ ...d, abilityText: e.target.value }))}
                 placeholder={"e.g. {T}: Add {G}."}
                 rows={3}
-                style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, fontFamily: "'Georgia', serif", fontSize: 13 }}
+                style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6, fontFamily: "inherit", fontSize: 13 }}
               />
             </div>
           </Accordion>
