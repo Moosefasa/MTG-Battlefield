@@ -314,7 +314,6 @@ function App() {
           position: "fixed", inset: 0, zIndex: 60,
           background: "rgba(0,0,0,0.72)",
           display: "flex", alignItems: "flex-end", justifyContent: "center",
-          animation: "fadeIn 0.2s ease",
         }}>
           <div onClick={e => e.stopPropagation()} style={{
             width: "100%", maxWidth: 520,
@@ -983,8 +982,7 @@ function RulingsSheet({ onClose, closing }) {
       position: "fixed", inset: 0, zIndex: 100,
       background: "rgba(0,0,0,0.7)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
-      animation: "fadeIn 0.2s ease",
-    }}>
+      }}>
       <div onClick={e => e.stopPropagation()} style={{
         width: "100%", maxWidth: 520,
         background: COLORS.surface,
@@ -1254,7 +1252,6 @@ function DiceModal({ onClose, closing }) {
       position:"fixed", inset:0, zIndex:100,
       background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center",
-      animation:"fadeIn 0.2s ease",
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         width:"100%", maxWidth:480,
