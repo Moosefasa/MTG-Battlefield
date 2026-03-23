@@ -270,9 +270,6 @@ function App() {
     localStorage.setItem('bf-theme', themeId);
   };
 
-  // Apply theme on every render so COLORS is always current before children render
-  applyThemeToColors(activeTheme);
-
   // Token form state lifted here so FAB + sheet render outside the scroll container
   const [showAdd, setShowAdd]       = useState(false);
   const [formClosing, setFormClosing] = useState(false);
@@ -331,6 +328,9 @@ function App() {
 
   const onScreen = screen === "tokens";
 
+  // Apply theme right before render so COLORS is current for all children
+  applyThemeToColors(activeTheme);
+
   return (
     <div style={{ position:"relative", minHeight:"100vh", background:COLORS.bg }}>
       <HubScreen onNav={goTo} onDice={openDice} onRulings={openRulings} playersRef={playersRef} activeFont={activeFont} onFontChange={applyFont} activeTheme={activeTheme} onThemeChange={applyTheme} />
@@ -339,9 +339,12 @@ function App() {
         <div ref={ttScrollRef} data-scroll="tt" style={{
           position:"fixed", inset:0, zIndex:50,
           overflowY:"auto", WebkitOverflowScrolling:"touch",
-          animation: animDir === "down"
-            ? "slideDown 0.34s cubic-bezier(0.4,0,0.2,1) forwards"
-            : "slideUp 0.34s cubic-bezier(0.4,0,0.2,1) forwards",
+          background: COLORS.bg,
+          ...(animDir ? {
+            animation: animDir === "down"
+              ? "slideDown 0.34s cubic-bezier(0.4,0,0.2,1) forwards"
+              : "slideUp 0.34s cubic-bezier(0.4,0,0.2,1) forwards",
+          } : {}),
         }}>
           <TokenTrackerScreen onBack={goBack}
             tokens={tokens} setTokens={setTokens} />
