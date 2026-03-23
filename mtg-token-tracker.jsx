@@ -1,20 +1,50 @@
 const { useState, useCallback, useRef } = React;
 
-const COLORS = {
-  bg: "#0a0c10",
-  surface: "#12161e",
-  card: "#1a1f2e",
-  border: "#2a3050",
-  gold: "#c9a84c",
-  goldLight: "#e8c96a",
-  teal: "#3db8a8",
-  red: "#c94c4c",
-  text: "#d4d8e8",
-  muted: "#6b7494",
-  tap: "#c97c3d",
-  artifact: "#a0a8c0",
-  eot: "#b06de8",
+const THEMES = {
+  mystic: {
+    name: "Mystic",
+    bg: "#0a0c10", surface: "#12161e", card: "#1a1f2e", border: "#2a3050",
+    gold: "#c9a84c", goldLight: "#e8c96a", teal: "#3db8a8", red: "#c94c4c",
+    text: "#d4d8e8", muted: "#6b7494", tap: "#c97c3d", artifact: "#a0a8c0",
+    eot: "#b06de8",
+  },
+  medieval: {
+    name: "Medieval",
+    bg: "#1a1510", surface: "#241e14", card: "#2e2618", border: "#5c4a28",
+    gold: "#c8922a", goldLight: "#e0b84a", teal: "#4a7c59", red: "#8b2a2a",
+    text: "#e8dcc8", muted: "#8a7a5a", tap: "#7a5c2a", artifact: "#9a9078",
+    eot: "#6a4a7a",
+  },
+  modern: {
+    name: "Modern",
+    bg: "#0d1117", surface: "#161b22", card: "#1c2333", border: "#30363d",
+    gold: "#58a6ff", goldLight: "#79c0ff", teal: "#3fb950", red: "#f85149",
+    text: "#e6edf3", muted: "#7d8590", tap: "#d29922", artifact: "#8b949e",
+    eot: "#bc8cff",
+  },
+  minimal: {
+    name: "Minimal",
+    bg: "#f5f0e8", surface: "#ede8de", card: "#e2dcd0", border: "#c8bfaa",
+    gold: "#8a6a2a", goldLight: "#a07c38", teal: "#2a6a5a", red: "#8a2a2a",
+    text: "#1a1610", muted: "#6a6050", tap: "#8a5a2a", artifact: "#6a6878",
+    eot: "#5a3a7a",
+  },
+  minimalDark: {
+    name: "Minimal Dark",
+    bg: "#111111", surface: "#1a1a1a", card: "#222222", border: "#333333",
+    gold: "#aaaaaa", goldLight: "#cccccc", teal: "#888888", red: "#cc4444",
+    text: "#eeeeee", muted: "#666666", tap: "#999999", artifact: "#777777",
+    eot: "#aaaaaa",
+  },
 };
+
+// COLORS is a live reference — components read from it so theme changes propagate
+const COLORS = Object.assign({}, THEMES.mystic);
+
+function applyThemeToColors(themeId) {
+  const t = THEMES[themeId] || THEMES.mystic;
+  Object.assign(COLORS, t);
+}
 
 const ARTIFACT_TOKENS = ["Treasure", "Clue", "Food", "Blood", "Map", "Shard"];
 
@@ -222,6 +252,8 @@ const FONTS = [
 ];
 
 function App() {
+  // Apply saved theme immediately so first render uses correct colors
+  useState(() => { applyThemeToColors(localStorage.getItem('bf-theme') || 'mystic'); });
   const [screen, setScreen]     = useState("hub");
   const [animDir, setAnimDir]   = useState(null);
   const [diceState, setDiceState] = useState("closed");
@@ -235,6 +267,14 @@ function App() {
     setActiveFont(stack);
     localStorage.setItem('bf-font', stack);
     document.documentElement.style.setProperty('--app-font', stack);
+  };
+  const [activeTheme, setActiveTheme] = useState(() => {
+    return localStorage.getItem('bf-theme') || 'mystic';
+  });
+  const applyTheme = (themeId) => {
+    applyThemeToColors(themeId);
+    setActiveTheme(themeId);
+    localStorage.setItem('bf-theme', themeId);
   };
 
   // Token form state lifted here so FAB + sheet render outside the scroll container
@@ -297,7 +337,7 @@ function App() {
 
   return (
     <div style={{ position:"relative", minHeight:"100vh", background:COLORS.bg }}>
-      <HubScreen onNav={goTo} onDice={openDice} onRulings={openRulings} playersRef={playersRef} activeFont={activeFont} onFontChange={applyFont} />
+      <HubScreen onNav={goTo} onDice={openDice} onRulings={openRulings} playersRef={playersRef} activeFont={activeFont} onFontChange={applyFont} activeTheme={activeTheme} onThemeChange={applyTheme} />
 
       {(onScreen || animDir) && (
         <div ref={ttScrollRef} data-scroll="tt" style={{
@@ -422,7 +462,7 @@ const ALL_PLAYER_COLORS = [
 const DEFAULT_COLOR_IDS = ["b1","r1","g1","p1"];
 let nextPlayerId = 5;
 
-function HubScreen({ onNav, onDice, onRulings, playersRef, activeFont, onFontChange }) {
+function HubScreen({ onNav, onDice, onRulings, playersRef, activeFont, onFontChange, activeTheme, onThemeChange }) {
   const [players, setPlayers] = useState(() => [
     { id:1, name:"Player 1", colorId:"b1", life:40, poison:0, energy:0, exp:0, rad:0, cmdDamage:{}, commanders:[] },
     { id:2, name:"Player 2", colorId:"r1", life:40, poison:0, energy:0, exp:0, rad:0, cmdDamage:{}, commanders:[] },
@@ -492,19 +532,42 @@ function HubScreen({ onNav, onDice, onRulings, playersRef, activeFont, onFontCha
           ))}
         </div>
 
-        {/* Font picker */}
-        <div style={{ display:"flex", justifyContent:"center", gap:5, marginTop:8, flexWrap:"wrap" }}>
-          {FONTS.map(f => {
-            const isActive = activeFont === f.stack;
+        {/* Settings row — font dropdown + theme pills */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginTop:8, flexWrap:"wrap" }}>
+          {/* Font dropdown */}
+          <div style={{ position:"relative", display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ fontSize:10, color:COLORS.muted, letterSpacing:1 }}>Aa</span>
+            <select
+              value={activeFont}
+              onChange={e => onFontChange(e.target.value)}
+              style={{
+                background: COLORS.card, border:`1px solid ${COLORS.border}`,
+                color: COLORS.text, borderRadius:8, padding:"4px 8px",
+                fontSize:12, cursor:"pointer", fontFamily:"inherit",
+                outline:"none", appearance:"none", paddingRight:22,
+              }}
+            >
+              {FONTS.map(f => (
+                <option key={f.id} value={f.stack} style={{ fontFamily:f.stack }}>{f.label}</option>
+              ))}
+            </select>
+            <span style={{ position:"absolute", right:6, pointerEvents:"none", color:COLORS.muted, fontSize:9 }}>▾</span>
+          </div>
+
+          {/* Divider */}
+          <div style={{ width:1, height:18, background:COLORS.border }} />
+
+          {/* Theme swatches */}
+          {Object.entries(THEMES).map(([id, t]) => {
+            const isActive = activeTheme === id;
             return (
-              <button key={f.id} onClick={() => onFontChange(f.stack)} style={{
-                padding:"3px 10px", borderRadius:12, fontSize:11,
-                background: isActive ? COLORS.border+"88" : "#ffffff06",
-                border:`1px solid ${isActive ? COLORS.muted : COLORS.border+"66"}`,
-                color: isActive ? COLORS.text : COLORS.muted,
-                cursor:"pointer", fontFamily:f.stack,
-                transition:"all 0.15s",
-              }}>{f.label}</button>
+              <button key={id} onClick={() => onThemeChange(id)} title={t.name} style={{
+                width:20, height:20, borderRadius:"50%", cursor:"pointer",
+                border: isActive ? `2px solid ${t.goldLight}` : `2px solid transparent`,
+                background: `linear-gradient(135deg, ${t.bg} 50%, ${t.gold} 50%)`,
+                boxShadow: isActive ? `0 0 8px ${t.gold}88` : "none",
+                transition:"all 0.15s", padding:0, flexShrink:0,
+              }} />
             );
           })}
         </div>
